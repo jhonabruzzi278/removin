@@ -394,7 +394,15 @@ export default function FolderWatchPage() {
 
   // RF-2: Escaneo optimizado que compara contra snapshot (solo para fallback)
   const scanFolder = async () => {
-    if (!inputDir || !outputDir) return;
+    if (!inputDir || !outputDir) {
+      console.log('[Escaneo] Cancelado: falta inputDir o outputDir');
+      return;
+    }
+    
+    if (!isMonitoringRef.current) {
+      console.log('[Escaneo] Cancelado: monitoreo no activo');
+      return;
+    }
     
     const scanTime = new Date();
     const scanNumber = scanCount + 1;
@@ -476,6 +484,8 @@ export default function FolderWatchPage() {
   };
 
   const startMonitoring = async () => {
+    console.log('[Start] Iniciando monitoreo...');
+    
     if (!inputDir || !outputDir) {
       error('❌ Selecciona las carpetas primero');
       return;
@@ -496,17 +506,23 @@ export default function FolderWatchPage() {
       return;
     }
     
+    console.log('[Start] Configurando estados...');
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     setScanCount(0);
     success('🚀 Monitoreo iniciado');
     
     // RF-2: Crear snapshot de archivos existentes
+    console.log('[Start] Creando snapshot...');
     const existingCount = await createSnapshot();
     info(`📸 Snapshot creado: ${existingCount} archivos existentes ignorados`);
     
     // RF-1: Intentar usar FileSystemObserver si está disponible
+    console.log('[Start] Verificando FileSystemObserver API...');
+    console.log('[Start] hasObserverAPI:', hasObserverAPI);
+    
     if (hasObserverAPI && typeof (self as any).FileSystemObserver !== 'undefined') {
+      console.log('[Start] FileSystemObserver disponible, intentando usar...');
       try {
         const Observer = (self as any).FileSystemObserver;
         const observer = new Observer(async (records: any[]) => {
@@ -539,31 +555,59 @@ export default function FolderWatchPage() {
         
         // Hacer un escaneo inicial incluso con Observer
         // (por si el usuario copió archivos durante la inicialización)
-        setTimeout(() => scanFolder(), 100);
+        setTimeout(() => {
+          console.log('[Observer] Ejecutando escaneo inicial de verificación');
+          scanFolder();
+        }, 100);
       } catch (err) {
         console.error('Error al inicializar FileSystemObserver:', err);
         // Caer al fallback
         setUseObserver(false);
         info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
+        
+        // Primer escaneo inmediato
+        scanFolder();
+        
+        // Configurar intervalo de polling
         intervalRef.current = setInterval(() => {
+          console.log('[Polling] Ejecutando escaneo automático desde setInterval');
           scanFolder();
         }, 3000);
+        
+        console.log('[Polling] Intervalo configurado, ID:', intervalRef.current);
+        
+        // Verificar después de 1 segundo que el intervalo sigue activo
+        setTimeout(() => {
+          console.log('[Polling] Verificación: intervalRef.current =', intervalRef.current);
+        }, 1000);
       }
     } else {
       // RF-2: Fallback con polling optimizado
+      console.log('[Start] FileSystemObserver NO disponible, usando polling');
       setUseObserver(false);
       info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
       
       // Primer escaneo inmediato
+      console.log('[Polling] Iniciando primer escaneo inmediato');
       scanFolder();
       
+      // Configurar intervalo de polling
       intervalRef.current = setInterval(() => {
+        console.log('[Polling] Ejecutando escaneo automático desde setInterval');
         scanFolder();
       }, 3000);
+      
+      console.log('[Polling] Intervalo configurado, ID:', intervalRef.current);
+      
+      // Verificar después de 1 segundo que el intervalo sigue activo
+      setTimeout(() => {
+        console.log('[Polling] Verificación: intervalRef.current =', intervalRef.current);
+      }, 1000);
     }
   };
 
   const stopMonitoring = () => {
+    console.log('[Stop] Deteniendo monitoreo...');
     setIsMonitoring(false);
     isMonitoringRef.current = false;
     info('⏸️ Monitoreo detenido');
@@ -571,6 +615,7 @@ export default function FolderWatchPage() {
     // RF-1: Desconectar FileSystemObserver si está activo
     if (observerRef.current) {
       try {
+        console.log('[Stop] Desconectando Observer');
         observerRef.current.disconnect();
         observerRef.current = null;
       } catch (err) {
@@ -580,6 +625,7 @@ export default function FolderWatchPage() {
     
     // Limpiar intervalo si existe
     if (intervalRef.current) {
+      console.log('[Stop] Limpiando intervalo:', intervalRef.current);
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
@@ -601,6 +647,7 @@ export default function FolderWatchPage() {
       error('❌ Debes iniciar el monitoreo primero');
       return;
     }
+    console.log('[ForceScan] Escaneo manual forzado por usuario');
     info('🔄 Escaneando carpeta...');
     scanFolder();
   };
