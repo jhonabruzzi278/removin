@@ -37,6 +37,8 @@ export default function FolderWatchPage() {
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([]);
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 });
   const [trackedCount, setTrackedCount] = useState(0);
+  const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
+  const [scanCount, setScanCount] = useState(0);
   const [whiteBackground, setWhiteBackground] = useState(false);
   const [hasReplicateToken, setHasReplicateToken] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
@@ -84,6 +86,18 @@ export default function FolderWatchPage() {
     isMonitoringRef.current = isMonitoring;
   }, [isMonitoring]);
 
+  // Actualizar UI cada segundo para mostrar tiempo desde último escaneo
+  useEffect(() => {
+    if (!isMonitoring || !lastScanTime) return;
+    
+    const interval = setInterval(() => {
+      // Forzar re-render para actualizar "hace X segundos"
+      setLastScanTime(prev => prev ? new Date(prev.getTime()) : null);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isMonitoring, lastScanTime?.getTime()]);
+
   // Verificar si el usuario tiene configurado el token de Replicate
   useEffect(() => {
     const checkToken = async () => {
@@ -120,6 +134,13 @@ export default function FolderWatchPage() {
         error('❌ Error al seleccionar carpeta de entrada');
       }
     }
+  };
+
+  const getTimeSinceLastScan = () => {
+    if (!lastScanTime) return '';
+    const seconds = Math.floor((Date.now() - lastScanTime.getTime()) / 1000);
+    if (seconds < 5) return 'ahora mismo';
+    return `hace ${seconds}s`;
   };
 
   const selectOutputFolder = async () => {
@@ -337,10 +358,18 @@ export default function FolderWatchPage() {
 
   const scanFolder = async () => {
     if (!inputDir || !outputDir) return;
+    
+    const scanTime = new Date();
+    const scanNumber = scanCount + 1;
+    setScanCount(scanNumber);
+    setLastScanTime(scanTime);
+
+    console.log(`\n[FolderWatch] ========== ESCANEO #${scanNumber} (${scanTime.toLocaleTimeString()}) ==========`);
 
     try {
       let filesFound = 0;
       let newFilesFound = 0;
+      const fileList: string[] = [];
       
       for await (const entry of inputDir.values()) {
         if (entry.kind === 'file') {
@@ -348,19 +377,24 @@ export default function FolderWatchPage() {
           
           if (file.type.startsWith('image/')) {
             filesFound++;
+            fileList.push(file.name);
+            
             if (!processedNamesRef.current.has(file.name)) {
               newFilesFound++;
               processedNamesRef.current.add(file.name);
               setTrackedCount(processedNamesRef.current.size);
               // Agregar a la cola en lugar de procesar inmediatamente
               processingQueueRef.current.push({ file, name: file.name });
-              console.log(`[FolderWatch] Nueva imagen detectada: ${file.name} (${Math.round(file.size / 1024)}KB)`);
+              console.log(`[FolderWatch] ✅ NUEVA imagen detectada: ${file.name} (${Math.round(file.size / 1024)}KB, tipo: ${file.type})`);
             }
           }
         }
       }
       
-      console.log(`[FolderWatch] Escaneo completado: ${filesFound} imágenes totales, ${newFilesFound} nuevas detectadas`);
+      console.log(`[FolderWatch] Archivos en carpeta: ${fileList.length > 0 ? fileList.join(', ') : 'ninguno'}`);
+      console.log(`[FolderWatch] Resultado: ${filesFound} imágenes totales, ${newFilesFound} NUEVAS detectadas`);
+      console.log(`[FolderWatch] Archivos rastreados hasta ahora: ${processedNamesRef.current.size}`);
+      console.log(`[FolderWatch] ========== FIN ESCANEO #${scanNumber} ==========\n`);
       
       // Procesar la cola con delay
       if (newFilesFound > 0) {
@@ -429,21 +463,27 @@ export default function FolderWatchPage() {
     console.log('[FolderWatch] Iniciando monitoreo...');
     console.log(`[FolderWatch] Carpeta monitoreada: ${inputDir.name}`);
     console.log(`[FolderWatch] Archivos ya procesados: ${processedNamesRef.current.size}`);
+    console.log(`[FolderWatch] Intervalo de escaneo: 5 segundos`);
     
     setIsMonitoring(true);
     isMonitoringRef.current = true;
+    setScanCount(0);
     addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
     info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
     
+    // Primer escaneo inmediato
     scanFolder();
     
+    // Configurar escaneo automático cada 5 segundos
     intervalRef.current = setInterval(() => {
+      console.log('[FolderWatch] 🔄 Disparando escaneo automático...');
       scanFolder();
     }, 5000);
   };
 
   const stopMonitoring = () => {
     console.log('[FolderWatch] Deteniendo monitoreo...');
+    console.log(`[FolderWatch] Total escaneos realizados: ${scanCount}`);
     console.log(`[FolderWatch] Total archivos procesados: ${processedNamesRef.current.size}`);
     
     setIsMonitoring(false);
@@ -571,8 +611,16 @@ export default function FolderWatchPage() {
         {isMonitoring && (
           <Alert className="bg-green-50 border-green-300">
             <Activity className="h-5 w-5 text-green-600 animate-pulse" />
-            <AlertDescription className="ml-2 text-green-800">
-              <strong>Monitoreo en curso</strong> - Escaneando carpeta cada 5 segundos. Las nuevas imágenes se procesarán automáticamente.
+            <AlertDescription className="ml-2 text-green-800 flex items-center justify-between">
+              <div>
+                <strong>Monitoreo en curso</strong> - Escaneando carpeta cada 5 segundos. Las nuevas imágenes se procesarán automáticamente.
+                {lastScanTime && (
+                  <div className="text-xs text-green-700 mt-1 flex items-center gap-2">
+                    <Clock size={12} />
+                    <span>Último escaneo: {getTimeSinceLastScan()} (Escaneo #{scanCount})</span>
+                  </div>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         )}
