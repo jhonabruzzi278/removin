@@ -82,9 +82,8 @@ app.get('/api/health', (req, res) => {
 // GET /api/debug - Debug de configuración (TEMPORAL)
 // ============================================
 app.get('/api/debug', async (req, res) => {
-  // Intentar inicializar Firebase para ver si hay errores
   let firebaseStatus = 'not initialized';
-  let firestoreStatus = 'not tested';
+  let realtimeDbStatus = 'not tested';
   let writeTestStatus = 'not tested';
   let initError = null;
   let projectInfo = null;
@@ -102,33 +101,34 @@ app.get('/api/debug', async (req, res) => {
         const app = admin.apps[0];
         projectInfo = {
           name: app.name,
-          projectId: app.options?.projectId || 'unknown'
+          projectId: app.options?.projectId || 'unknown',
+          databaseURL: app.options?.databaseURL || 'not set'
         };
       }
       
-      // Intentar acceder a Firestore usando getDb()
+      // Intentar acceder a Realtime Database
       try {
         const db = getDb();
         if (db) {
-          firestoreStatus = 'accessible';
+          realtimeDbStatus = 'accessible';
           
-          // Intentar escribir un documento de prueba
+          // Intentar escribir en Realtime Database
           try {
-            const testRef = db.collection('_test').doc('debug');
+            const testRef = db.ref('_test/debug');
             await testRef.set({
               test: true,
-              timestamp: admin.firestore.FieldValue.serverTimestamp()
+              timestamp: Date.now()
             });
-            await testRef.delete(); // Limpiar después
+            await testRef.remove(); // Limpiar después
             writeTestStatus = 'success';
           } catch (writeError) {
-            writeTestStatus = `error: ${writeError.code} - ${writeError.message} - ${writeError.details || ''}`;
+            writeTestStatus = `error: ${writeError.code || 'unknown'} - ${writeError.message}`;
           }
         } else {
-          firestoreStatus = 'getDb returned null';
+          realtimeDbStatus = 'getDb returned null';
         }
-      } catch (fsError) {
-        firestoreStatus = `error: ${fsError.message}`;
+      } catch (dbError) {
+        realtimeDbStatus = `error: ${dbError.message}`;
       }
     } else {
       firebaseStatus = 'failed - returned null';
@@ -144,12 +144,11 @@ app.get('/api/debug', async (req, res) => {
       projectId: process.env.FIREBASE_PROJECT_ID,
       hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
       hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
-      privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
-      hasServiceAccountJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+      privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0
     },
     firebase: {
       status: firebaseStatus,
-      firestoreStatus,
+      realtimeDbStatus,
       writeTestStatus,
       projectInfo,
       initError

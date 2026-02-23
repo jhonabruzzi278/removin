@@ -1,40 +1,7 @@
 import admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
 
 // Inicializar Firebase Admin SDK
-// En producción, usa las variables de entorno de Vercel
-let firebaseAdmin;
-let firestoreInstance = null;
-
-/**
- * Obtener instancia de Firestore
- */
-function getDb() {
-  if (firestoreInstance) return firestoreInstance;
-  
-  // Asegurarse de que Firebase está inicializado
-  initializeFirebase();
-  
-  if (admin.apps.length === 0) {
-    console.error('❌ Firebase no está inicializado');
-    return null;
-  }
-  
-  try {
-    // Usar admin.firestore() y configurar settings
-    firestoreInstance = admin.firestore();
-    
-    // Configurar settings para evitar problemas de conexión
-    firestoreInstance.settings({
-      ignoreUndefinedProperties: true
-    });
-    
-    return firestoreInstance;
-  } catch (e) {
-    console.error('❌ Error obteniendo Firestore:', e.message);
-    return null;
-  }
-}
+let firebaseAdmin = null;
 
 /**
  * Procesar la clave privada para manejar diferentes formatos
@@ -52,7 +19,6 @@ function parsePrivateKey(key) {
     return key.replace(/\\n/g, '\n');
   }
   
-  // Si no tiene ninguno de los dos, intentar agregar saltos de línea
   return key;
 }
 
@@ -60,71 +26,38 @@ function initializeFirebase() {
   if (firebaseAdmin) return firebaseAdmin;
   
   try {
-    // Si ya está inicializado, retornarlo
     if (admin.apps.length > 0) {
       firebaseAdmin = admin;
       return firebaseAdmin;
     }
 
-    // Intentar cargar desde JSON completo primero (más robusto)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-      try {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          projectId: serviceAccount.project_id
-        });
-        firebaseAdmin = admin;
-        console.log('✅ Firebase Admin inicializado desde JSON completo con projectId:', serviceAccount.project_id);
-        return firebaseAdmin;
-      } catch (jsonError) {
-        console.error('Error parseando FIREBASE_SERVICE_ACCOUNT_JSON:', jsonError.message);
-      }
-    }
-
-    // Configuración desde variables de entorno individuales
     const rawKey = process.env.FIREBASE_PRIVATE_KEY;
     const privateKey = parsePrivateKey(rawKey);
+    const projectId = process.env.FIREBASE_PROJECT_ID;
     
     const serviceAccount = {
-      projectId: process.env.FIREBASE_PROJECT_ID,
+      projectId: projectId,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: privateKey
     };
 
-    // Log para debugging
-    console.log('🔧 Firebase Config Check:', {
-      hasProjectId: !!serviceAccount.projectId,
-      hasClientEmail: !!serviceAccount.clientEmail,
-      hasPrivateKey: !!privateKey,
-      privateKeyLength: privateKey?.length || 0,
-      privateKeyStart: privateKey?.substring(0, 50),
-      rawKeyHasBackslashN: rawKey?.includes('\\n'),
-      rawKeyHasRealNewline: rawKey?.includes('\n')
-    });
-
-    // Verificar que tenemos las credenciales
     if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
-      console.warn('⚠️ Firebase Admin no configurado. Faltan credenciales:', {
-        projectId: !!serviceAccount.projectId,
-        clientEmail: !!serviceAccount.clientEmail,
-        privateKey: !!serviceAccount.privateKey
-      });
+      console.warn('⚠️ Firebase Admin no configurado');
       return null;
     }
 
-    // Inicializar con projectId explícito
+    // Inicializar con Realtime Database URL
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      projectId: serviceAccount.projectId
+      projectId: projectId,
+      databaseURL: `https://${projectId}-default-rtdb.firebaseio.com`
     });
 
     firebaseAdmin = admin;
-    console.log('✅ Firebase Admin inicializado correctamente con projectId:', serviceAccount.projectId);
+    console.log('✅ Firebase Admin inicializado con projectId:', projectId);
     return firebaseAdmin;
   } catch (error) {
     console.error('❌ Error inicializando Firebase Admin:', error.message);
-    console.error('❌ Stack:', error.stack);
     return null;
   }
 }
@@ -155,7 +88,7 @@ export async function verifyAuthToken(authHeader) {
 }
 
 /**
- * Obtener token de Replicate del usuario desde Firestore
+ * Obtener token de Replicate del usuario desde Realtime Database
  */
 export async function getUserReplicateToken(uid) {
   const firebase = initializeFirebase();
@@ -165,19 +98,14 @@ export async function getUserReplicateToken(uid) {
   }
 
   try {
-    const db = getDb();
-    if (!db) {
-      return { token: null, error: 'No se pudo conectar a Firestore' };
-    }
+    const db = firebase.database();
+    const snapshot = await db.ref(`users/${uid}/replicateToken`).get();
     
-    const doc = await db.collection('users').doc(uid).get();
-    
-    if (!doc.exists) {
-      return { token: null, error: 'Usuario no encontrado' };
+    if (!snapshot.exists()) {
+      return { token: null, error: null }; // Usuario sin token aún
     }
 
-    const data = doc.data();
-    return { token: data?.replicateToken || null, error: null };
+    return { token: snapshot.val(), error: null };
   } catch (error) {
     console.error('Error obteniendo token de usuario:', error.message);
     return { token: null, error: 'Error al obtener token' };
@@ -185,7 +113,7 @@ export async function getUserReplicateToken(uid) {
 }
 
 /**
- * Guardar token de Replicate del usuario en Firestore
+ * Guardar token de Replicate del usuario en Realtime Database
  */
 export async function saveUserReplicateToken(uid, token) {
   console.log('📝 saveUserReplicateToken llamado para uid:', uid?.slice(0, 8));
@@ -198,25 +126,35 @@ export async function saveUserReplicateToken(uid, token) {
   }
 
   try {
-    console.log('📝 Intentando guardar en Firestore...');
-    const db = getDb();
-    if (!db) {
-      console.error('❌ No se pudo obtener instancia de Firestore');
-      return { success: false, error: 'No se pudo conectar a Firestore' };
-    }
+    console.log('📝 Intentando guardar en Realtime Database...');
+    const db = firebase.database();
     
-    await db.collection('users').doc(uid).set({
+    await db.ref(`users/${uid}`).set({
       replicateToken: token,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+      updatedAt: Date.now()
+    });
 
     console.log('✅ Token guardado exitosamente');
     return { success: true, error: null };
   } catch (error) {
     console.error('❌ Error guardando token:', error.message);
-    console.error('❌ Error completo:', error);
     return { success: false, error: `Error al guardar token: ${error.message}` };
   }
 }
 
-export { initializeFirebase, getDb };
+/**
+ * Obtener instancia de Realtime Database para debug
+ */
+export function getDb() {
+  const firebase = initializeFirebase();
+  if (!firebase) return null;
+  
+  try {
+    return firebase.database();
+  } catch (e) {
+    console.error('Error obteniendo database:', e.message);
+    return null;
+  }
+}
+
+export { initializeFirebase };
