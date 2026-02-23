@@ -57,10 +57,13 @@ const REPLICATE_MODELS = {
 // ============================================
 async function authenticateUser(req, res, next) {
   const authHeader = req.headers.authorization;
+  console.log('🔐 authenticateUser - header presente:', !!authHeader);
   
   const { uid, error } = await verifyAuthToken(authHeader);
+  console.log('🔐 Resultado auth:', { uid: uid?.slice(0, 8), error });
   
   if (error || !uid) {
+    console.log('❌ Auth failed:', error);
     return res.status(401).json({ error: error || 'No autenticado' });
   }
   
@@ -148,23 +151,31 @@ app.get('/api/user/token', authenticateUser, async (req, res) => {
 // ============================================
 app.post('/api/user/token', authenticateUser, async (req, res) => {
   try {
+    console.log('📝 POST /api/user/token - uid:', req.uid?.slice(0, 8));
+    
     const { token } = req.body;
+    console.log('📝 Token recibido:', token ? `${token.slice(0, 10)}...` : 'null');
     
     // Validar formato del token
     if (!token || !token.startsWith('r8_') || token.length < 33) {
+      console.log('❌ Token inválido');
       return res.status(400).json({ error: 'Token de Replicate inválido. Debe empezar con r8_ y tener al menos 33 caracteres.' });
     }
     
+    console.log('📝 Llamando a saveUserReplicateToken...');
     const { success, error } = await saveUserReplicateToken(req.uid, token);
+    console.log('📝 Resultado:', { success, error });
     
     if (!success) {
-      return res.status(500).json({ error: error || 'Error al guardar token' });
+      console.log('❌ Error guardando token:', error);
+      return res.status(500).json({ error: error || 'Error al guardar token', details: error });
     }
     
+    console.log('✅ Token guardado exitosamente');
     res.json({ success: true, message: 'Token guardado correctamente' });
   } catch (error) {
-    console.error('Error saving token:', error);
-    res.status(500).json({ error: 'Error al guardar token' });
+    console.error('❌ Error en POST /api/user/token:', error);
+    res.status(500).json({ error: 'Error al guardar token', details: error.message });
   }
 });
 
