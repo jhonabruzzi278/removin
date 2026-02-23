@@ -526,15 +526,19 @@ export default function FolderWatchPage() {
       try {
         const Observer = (self as any).FileSystemObserver;
         const observer = new Observer(async (records: any[]) => {
+          console.log(`[Observer] Callback ejecutado con ${records.length} registro(s)`);
           for (const record of records) {
+            console.log(`[Observer] Evento tipo: ${record.type}`);
             // RF-1: Solo reaccionar a archivos nuevos (appeared)
             if (record.type === 'appeared' || record.type === 'modified') {
               try {
                 const handle = record.root || record.changedHandle;
                 if (handle && handle.kind === 'file') {
                   const file = await handle.getFile();
+                  console.log(`[Observer] Archivo detectado: ${file.name}`);
                   
                   if (file.type.startsWith('image/') && !processedNamesRef.current.has(file.name)) {
+                    console.log(`[Observer] ✅ Archivo NUEVO vía Observer: ${file.name}`);
                     processedNamesRef.current.add(file.name);
                     setTrackedCount(processedNamesRef.current.size);
                     processingQueueRef.current.push({ file, name: file.name });
@@ -551,7 +555,7 @@ export default function FolderWatchPage() {
         await observer.observe(inputDir, { recursive: false });
         observerRef.current = observer;
         setUseObserver(true);
-        info(`⚡ Monitoreo reactivo activo (FileSystemObserver) - Detección instantánea`);
+        info(`⚡ Observer activo + Polling de respaldo cada 10s`);
         
         // Hacer un escaneo inicial incluso con Observer
         // (por si el usuario copió archivos durante la inicialización)
@@ -559,6 +563,14 @@ export default function FolderWatchPage() {
           console.log('[Observer] Ejecutando escaneo inicial de verificación');
           scanFolder();
         }, 100);
+        
+        // IMPORTANTE: Agregar polling de respaldo cada 10s
+        // porque Observer puede no detectar todos los eventos
+        intervalRef.current = setInterval(() => {
+          console.log('[Observer+Polling] Escaneo de respaldo automático');
+          scanFolder();
+        }, 10000);
+        console.log('[Observer+Polling] Polling de respaldo configurado cada 10s');
       } catch (err) {
         console.error('Error al inicializar FileSystemObserver:', err);
         // Caer al fallback
@@ -753,7 +765,7 @@ export default function FolderWatchPage() {
                   {useObserver ? (
                     <Badge className="bg-emerald-500 text-white text-xs flex items-center gap-1">
                       <Zap size={10} />
-                      Detección Instantánea
+                      Observer + Respaldo 10s
                     </Badge>
                   ) : (
                     <Badge className="bg-blue-500 text-white text-xs flex items-center gap-1">
@@ -764,7 +776,7 @@ export default function FolderWatchPage() {
                 </div>
                 {useObserver ? (
                   <p className="text-xs">
-                    Usando FileSystemObserver - Las imágenes nuevas se detectan instantáneamente sin consumir CPU.
+                    Usando FileSystemObserver con polling de respaldo cada 10 segundos para máxima confiabilidad.
                   </p>
                 ) : (
                   <>
