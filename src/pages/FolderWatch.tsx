@@ -498,7 +498,7 @@ export default function FolderWatchPage() {
                 Procesa imágenes automáticamente en tiempo real
               </p>
             </div>
-            <Tooltip content="Monitorea una carpeta local y procesa automáticamente nuevas imágenes cada 3 segundos" position="right">
+            <Tooltip content="Monitorea una carpeta local y procesa automáticamente nuevas imágenes cada 5 segundos" position="right">
               <button className="text-slate-400 hover:text-slate-600 transition-colors">
                 <HelpCircle size={20} />
               </button>
