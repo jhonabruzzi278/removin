@@ -126,9 +126,7 @@ export default function FolderWatchPage() {
       setInputDir(dirHandle);
       // No limpiar processedNamesRef cuando se cambia de carpeta
       // para permitir iniciar monitoreo sin procesar archivos viejos
-      addLog({ name: `📁 Carpeta de entrada: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
-      console.log(`[FolderWatch] Carpeta seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
         error('❌ Error al seleccionar carpeta de entrada');
@@ -147,7 +145,6 @@ export default function FolderWatchPage() {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
       setOutputDir(dirHandle);
-      addLog({ name: `💾 Carpeta de salida: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
@@ -188,8 +185,6 @@ export default function FolderWatchPage() {
 
       // Crear preview de la imagen original
       const originalPreview = URL.createObjectURL(file);
-
-      addLog({ name: `📤 ${fileName}`, status: 'processing', originalPreview });
 
       // Sanitizar nombre de archivo para evitar path traversal
       const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -364,12 +359,9 @@ export default function FolderWatchPage() {
     setScanCount(scanNumber);
     setLastScanTime(scanTime);
 
-    console.log(`\n[FolderWatch] ========== ESCANEO #${scanNumber} (${scanTime.toLocaleTimeString()}) ==========`);
-
     try {
       let filesFound = 0;
       let newFilesFound = 0;
-      const fileList: string[] = [];
       
       for await (const entry of inputDir.values()) {
         if (entry.kind === 'file') {
@@ -377,7 +369,6 @@ export default function FolderWatchPage() {
           
           if (file.type.startsWith('image/')) {
             filesFound++;
-            fileList.push(file.name);
             
             if (!processedNamesRef.current.has(file.name)) {
               newFilesFound++;
@@ -385,16 +376,10 @@ export default function FolderWatchPage() {
               setTrackedCount(processedNamesRef.current.size);
               // Agregar a la cola en lugar de procesar inmediatamente
               processingQueueRef.current.push({ file, name: file.name });
-              console.log(`[FolderWatch] ✅ NUEVA imagen detectada: ${file.name} (${Math.round(file.size / 1024)}KB, tipo: ${file.type})`);
             }
           }
         }
       }
-      
-      console.log(`[FolderWatch] Archivos en carpeta: ${fileList.length > 0 ? fileList.join(', ') : 'ninguno'}`);
-      console.log(`[FolderWatch] Resultado: ${filesFound} imágenes totales, ${newFilesFound} NUEVAS detectadas`);
-      console.log(`[FolderWatch] Archivos rastreados hasta ahora: ${processedNamesRef.current.size}`);
-      console.log(`[FolderWatch] ========== FIN ESCANEO #${scanNumber} ==========\n`);
       
       // Procesar la cola con delay
       if (newFilesFound > 0) {
@@ -459,16 +444,10 @@ export default function FolderWatchPage() {
       error('❌ Selecciona un modelo de IA primero');
       return;
     }
-
-    console.log('[FolderWatch] Iniciando monitoreo...');
-    console.log(`[FolderWatch] Carpeta monitoreada: ${inputDir.name}`);
-    console.log(`[FolderWatch] Archivos ya procesados: ${processedNamesRef.current.size}`);
-    console.log(`[FolderWatch] Intervalo de escaneo: 5 segundos`);
     
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     setScanCount(0);
-    addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
     info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
     
     // Primer escaneo inmediato
@@ -476,19 +455,13 @@ export default function FolderWatchPage() {
     
     // Configurar escaneo automático cada 5 segundos
     intervalRef.current = setInterval(() => {
-      console.log('[FolderWatch] 🔄 Disparando escaneo automático...');
       scanFolder();
     }, 5000);
   };
 
   const stopMonitoring = () => {
-    console.log('[FolderWatch] Deteniendo monitoreo...');
-    console.log(`[FolderWatch] Total escaneos realizados: ${scanCount}`);
-    console.log(`[FolderWatch] Total archivos procesados: ${processedNamesRef.current.size}`);
-    
     setIsMonitoring(false);
     isMonitoringRef.current = false;
-    addLog({ name: '⏸️ Monitoreo detenido', status: 'completed' });
     info('⏸️ Monitoreo detenido - Cancelando procesamiento pendiente');
     
     if (intervalRef.current) {
@@ -512,7 +485,6 @@ export default function FolderWatchPage() {
     setStats({ total: 0, success: 0, errors: 0 });
     processedNamesRef.current.clear();
     setTrackedCount(0);
-    console.log('[FolderWatch] Registro limpiado - registro de archivos procesados reseteado');
     success('✅ Registro limpiado');
   };
 
@@ -521,7 +493,6 @@ export default function FolderWatchPage() {
       error('❌ Debes iniciar el monitoreo primero');
       return;
     }
-    console.log('[FolderWatch] Escaneo manual forzado...');
     info('🔄 Escaneando carpeta...');
     scanFolder();
   };
