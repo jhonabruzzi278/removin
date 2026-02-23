@@ -370,15 +370,20 @@ export default function FolderWatchPage() {
     
     try {
       const snapshot = new Set<string>();
+      console.log('[Snapshot] Creando snapshot de archivos existentes...');
+      
       for await (const entry of inputDir.values()) {
         if (entry.kind === 'file') {
           const file = await entry.getFile();
           if (file.type.startsWith('image/')) {
             snapshot.add(file.name);
+            console.log(`[Snapshot] Agregado a ignorar: ${file.name}`);
           }
         }
       }
+      
       snapshotRef.current = snapshot;
+      console.log(`[Snapshot] Snapshot completado: ${snapshot.size} archivos serán ignorados`);
       info(`📸 Snapshot creado: ${snapshot.size} archivos existentes serán ignorados`);
       return snapshot.size;
     } catch (err) {
@@ -400,6 +405,8 @@ export default function FolderWatchPage() {
       let filesFound = 0;
       let newFilesFound = 0;
       
+      console.log(`[Escaneo #${scanNumber}] Iniciando escaneo...`);
+      
       for await (const entry of inputDir.values()) {
         if (entry.kind === 'file') {
           const file = await entry.getFile();
@@ -407,18 +414,27 @@ export default function FolderWatchPage() {
           if (file.type.startsWith('image/')) {
             filesFound++;
             
+            const inSnapshot = snapshotRef.current.has(file.name);
+            const inProcessed = processedNamesRef.current.has(file.name);
+            
+            console.log(`[Escaneo] Archivo: ${file.name} - inSnapshot: ${inSnapshot}, inProcessed: ${inProcessed}`);
+            
             // RF-2: Solo procesar si NO está en el snapshot inicial
-            if (!snapshotRef.current.has(file.name) && !processedNamesRef.current.has(file.name)) {
+            if (!inSnapshot && !inProcessed) {
               newFilesFound++;
               processedNamesRef.current.add(file.name);
               setTrackedCount(processedNamesRef.current.size);
               processingQueueRef.current.push({ file, name: file.name });
+              console.log(`[Escaneo] ✅ Archivo NUEVO detectado: ${file.name}`);
             }
           }
         }
       }
       
+      console.log(`[Escaneo #${scanNumber}] Completado - Total imágenes: ${filesFound}, Nuevas: ${newFilesFound}`);
+      
       if (newFilesFound > 0) {
+        info(`🔍 Detectados ${newFilesFound} archivo(s) nuevo(s)`);
         processQueue();
       }
     } catch (err) {
@@ -520,26 +536,30 @@ export default function FolderWatchPage() {
         observerRef.current = observer;
         setUseObserver(true);
         info(`⚡ Monitoreo reactivo activo (FileSystemObserver) - Detección instantánea`);
+        
+        // Hacer un escaneo inicial incluso con Observer
+        // (por si el usuario copió archivos durante la inicialización)
+        setTimeout(() => scanFolder(), 100);
       } catch (err) {
         console.error('Error al inicializar FileSystemObserver:', err);
         // Caer al fallback
         setUseObserver(false);
-        info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
+        info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
         intervalRef.current = setInterval(() => {
           scanFolder();
-        }, 5000);
+        }, 3000);
       }
     } else {
       // RF-2: Fallback con polling optimizado
       setUseObserver(false);
-      info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
+      info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
       
       // Primer escaneo inmediato
       scanFolder();
       
       intervalRef.current = setInterval(() => {
         scanFolder();
-      }, 5000);
+      }, 3000);
     }
   };
 
@@ -691,7 +711,7 @@ export default function FolderWatchPage() {
                   ) : (
                     <Badge className="bg-blue-500 text-white text-xs flex items-center gap-1">
                       <Clock size={10} />
-                      Escaneo 5s
+                      Escaneo 3s
                     </Badge>
                   )}
                 </div>
@@ -701,7 +721,7 @@ export default function FolderWatchPage() {
                   </p>
                 ) : (
                   <>
-                    <p className="text-xs">Escaneando carpeta cada 5 segundos. Las nuevas imágenes se procesarán automáticamente.</p>
+                    <p className="text-xs">Escaneando carpeta cada 3 segundos. Las nuevas imágenes se procesarán automáticamente.</p>
                     {lastScanTime && (
                       <div className="text-xs text-green-700 mt-1 flex items-center gap-2">
                         <Clock size={12} />
