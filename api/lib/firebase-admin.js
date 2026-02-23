@@ -12,18 +12,22 @@ let firestoreInstance = null;
 function getDb() {
   if (firestoreInstance) return firestoreInstance;
   
-  const app = initializeFirebase();
-  if (!app) return null;
+  // Asegurarse de que Firebase está inicializado
+  initializeFirebase();
   
-  // Intentar obtener Firestore con el databaseId explícito
-  try {
-    firestoreInstance = getFirestore(app, '(default)');
-  } catch (e) {
-    // Si falla, intentar sin especificar databaseId
-    firestoreInstance = getFirestore(app);
+  if (admin.apps.length === 0) {
+    console.error('❌ Firebase no está inicializado');
+    return null;
   }
   
-  return firestoreInstance;
+  try {
+    // Usar admin.firestore() en lugar de getFirestore()
+    firestoreInstance = admin.firestore();
+    return firestoreInstance;
+  } catch (e) {
+    console.error('❌ Error obteniendo Firestore:', e.message);
+    return null;
+  }
 }
 
 /**
@@ -192,11 +196,9 @@ export async function saveUserReplicateToken(uid, token) {
       return { success: false, error: 'No se pudo conectar a Firestore' };
     }
     
-    const { FieldValue } = await import('firebase-admin/firestore');
-    
     await db.collection('users').doc(uid).set({
       replicateToken: token,
-      updatedAt: FieldValue.serverTimestamp()
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
     console.log('✅ Token guardado exitosamente');

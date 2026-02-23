@@ -90,7 +90,7 @@ app.get('/api/debug', async (req, res) => {
   
   try {
     const { initializeFirebase, getDb } = await import('./lib/firebase-admin.js');
-    const { FieldValue } = await import('firebase-admin/firestore');
+    const admin = (await import('firebase-admin')).default;
     const firebase = initializeFirebase();
     
     if (firebase) {
@@ -107,7 +107,7 @@ app.get('/api/debug', async (req, res) => {
             const testRef = db.collection('_test').doc('debug');
             await testRef.set({
               test: true,
-              timestamp: FieldValue.serverTimestamp()
+              timestamp: admin.firestore.FieldValue.serverTimestamp()
             });
             await testRef.delete(); // Limpiar después
             writeTestStatus = 'success';
