@@ -15,19 +15,8 @@ import { get, set } from 'idb-keyval';
 import {
   Folder, Play, Pause, Trash2, CheckCircle2,
   AlertCircle, Loader2, Info, Activity, HelpCircle, 
-  RefreshCw, X, Star, Clock, DollarSign, Zap
+  RefreshCw, Star, Clock, DollarSign, Zap
 } from 'lucide-react';
-
-interface ProcessedFile {
-  name: string;
-  status: 'processing' | 'completed' | 'error';
-  time?: number;
-  error?: string;
-  originalPreview?: string;
-  processedPreview?: string;
-  modelUsed?: string;
-  modelName?: string;
-}
 
 export default function FolderWatchPage() {
   const { user } = useAuth();
@@ -35,7 +24,6 @@ export default function FolderWatchPage() {
   const [inputDir, setInputDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [outputDir, setOutputDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([]);
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 });
   const [trackedCount, setTrackedCount] = useState(0);
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
@@ -44,7 +32,6 @@ export default function FolderWatchPage() {
   const [hasReplicateToken, setHasReplicateToken] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
-  const [reprocessingFile, setReprocessingFile] = useState<ProcessedFile | null>(null);
   const [useObserver, setUseObserver] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -186,7 +173,6 @@ export default function FolderWatchPage() {
       setInputDir(dirHandle);
       // RF-3: Guardar en IndexedDB para persistencia
       await set('folderwatch-input', dirHandle);
-      addLog({ name: `📁 Carpeta de entrada: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
@@ -208,7 +194,6 @@ export default function FolderWatchPage() {
       setOutputDir(dirHandle);
       // RF-3: Guardar en IndexedDB para persistencia
       await set('folderwatch-output', dirHandle);
-      addLog({ name: `💾 Carpeta de salida: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
@@ -217,24 +202,10 @@ export default function FolderWatchPage() {
     }
   };
 
-  const addLog = (entry: Partial<ProcessedFile> & { name: string }) => {
-    setProcessedFiles(prev => {
-      const existing = prev.find(f => f.name === entry.name);
-      if (existing) {
-        return prev.map(f => f.name === entry.name 
-          ? { ...f, ...entry } 
-          : f
-        );
-      }
-      return [{ status: 'processing', ...entry } as ProcessedFile, ...prev].slice(0, 100);
-    });
-  };
-
   const processImage = async (file: File, fileName: string, modelVersion?: string) => {
     const startTime = Date.now();
     // Usar refs para obtener valores actuales (evitar stale closures)
     const model = modelVersion || selectedModelRef.current?.version;
-    const modelInfo = bgModels.find(m => m.version === model);
     const currentWhiteBackground = whiteBackgroundRef.current;
     
     try {
@@ -246,11 +217,6 @@ export default function FolderWatchPage() {
       if (file.size > 10 * 1024 * 1024) {
         throw new Error('El archivo excede el tamaño máximo de 10MB');
       }
-
-      // Crear preview de la imagen original
-      const originalPreview = URL.createObjectURL(file);
-
-      addLog({ name: `📤 ${fileName}`, status: 'processing', originalPreview });
 
       // Sanitizar nombre de archivo para evitar path traversal
       const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -352,19 +318,8 @@ export default function FolderWatchPage() {
       await writable.write(resultBlob);
       await writable.close();
 
-      // Crear preview del resultado
-      const processedPreview = data.outputUrl;
-
       const processingTime = Math.round((Date.now() - startTime) / 1000);
-      addLog({
-        name: `✅ ${fileName}`,
-        status: 'completed',
-        time: processingTime,
-        originalPreview,
-        processedPreview,
-        modelUsed: model,
-        modelName: modelInfo?.name
-      });
+      success(`✅ ${fileName} procesada (${processingTime}s)`);
       
       setStats(prev => ({
         total: prev.total + 1,
@@ -378,8 +333,8 @@ export default function FolderWatchPage() {
       } catch {
         // Error no crítico al limpiar archivo temporal
       }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
       
       // Mensaje de error amigable según el tipo
       let userFriendlyError = errorMsg;
@@ -399,16 +354,8 @@ export default function FolderWatchPage() {
         userFriendlyError = 'Error de red al descargar imagen. Verifica tu conexión y las URLs de Firebase.';
       }
 
-      // Preservar preview original para poder reprocesar
-      const existingFile = processedFiles.find(f => f.name === fileName);
-      const originalPreview = existingFile?.originalPreview;
+      error(`❌ ${fileName}: ${userFriendlyError}`);
       
-      addLog({ 
-        name: `❌ ${fileName}`, 
-        status: 'error', 
-        error: userFriendlyError, 
-        originalPreview 
-      });
       setStats(prev => ({
         total: prev.total + 1,
         success: prev.success,
@@ -434,8 +381,8 @@ export default function FolderWatchPage() {
       snapshotRef.current = snapshot;
       info(`📸 Snapshot creado: ${snapshot.size} archivos existentes serán ignorados`);
       return snapshot.size;
-    } catch (error) {
-      console.error('Error al crear snapshot:', error);
+    } catch (err) {
+      console.error('Error al crear snapshot:', err);
       return 0;
     }
   };
@@ -474,14 +421,14 @@ export default function FolderWatchPage() {
       if (newFilesFound > 0) {
         processQueue();
       }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
       
       if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
-        addLog({ name: '⚠️ Error: Sin permisos para acceder a la carpeta', status: 'error' });
+        error('⚠️ Error: Sin permisos para acceder a la carpeta');
         stopMonitoring();
       } else {
-        addLog({ name: `⚠️ Error al escanear carpeta: ${errorMsg}`, status: 'error' });
+        error(`⚠️ Error al escanear carpeta: ${errorMsg}`);
       }
     }
   };
@@ -536,7 +483,7 @@ export default function FolderWatchPage() {
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     setScanCount(0);
-    addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
+    success('🚀 Monitoreo iniciado');
     
     // RF-2: Crear snapshot de archivos existentes
     const existingCount = await createSnapshot();
@@ -599,8 +546,7 @@ export default function FolderWatchPage() {
   const stopMonitoring = () => {
     setIsMonitoring(false);
     isMonitoringRef.current = false;
-    addLog({ name: '⏸️ Monitoreo detenido', status: 'completed' });
-    info('⏸️ Monitoreo detenido - Cancelando procesamiento pendiente');
+    info('⏸️ Monitoreo detenido');
     
     // RF-1: Desconectar FileSystemObserver si está activo
     if (observerRef.current) {
@@ -621,23 +567,13 @@ export default function FolderWatchPage() {
     setUseObserver(false);
   };
 
-  const clearLogs = () => {
-    // Liberar Object URLs para prevenir memory leaks
-    processedFiles.forEach(file => {
-      if (file.originalPreview?.startsWith('blob:')) {
-        URL.revokeObjectURL(file.originalPreview);
-      }
-      if (file.processedPreview?.startsWith('blob:')) {
-        URL.revokeObjectURL(file.processedPreview);
-      }
-    });
-
-    setProcessedFiles([]);
+  const resetStats = () => {
     setStats({ total: 0, success: 0, errors: 0 });
     processedNamesRef.current.clear();
     snapshotRef.current.clear();
+    processingQueueRef.current = [];
     setTrackedCount(0);
-    success('✅ Registro limpiado');
+    success('✅ Estadísticas reiniciadas');
   };
 
   const forceScan = () => {
@@ -649,7 +585,7 @@ export default function FolderWatchPage() {
     scanFolder();
   };
 
-  // Cleanup al desmontar: liberar Object URLs, detener monitoreo y desconectar observer
+  // Cleanup al desmontar: detener monitoreo y desconectar observer
   useEffect(() => {
     return () => {
       // RF-1: Desconectar FileSystemObserver
@@ -666,18 +602,8 @@ export default function FolderWatchPage() {
         clearInterval(intervalRef.current);
       }
       isMonitoringRef.current = false;
-
-      // Liberar Object URLs para prevenir memory leaks
-      processedFiles.forEach(file => {
-        if (file.originalPreview?.startsWith('blob:')) {
-          URL.revokeObjectURL(file.originalPreview);
-        }
-        if (file.processedPreview?.startsWith('blob:')) {
-          URL.revokeObjectURL(file.processedPreview);
-        }
-      });
     };
-  }, [processedFiles]);
+  }, []);
 
   if (!isSupported) {
     return (
@@ -961,10 +887,10 @@ export default function FolderWatchPage() {
           </>
         )}
         <Button
-          onClick={clearLogs}
+          onClick={resetStats}
           variant="outline"
           className="h-12 px-4"
-          title="Limpiar registro y resetear archivos procesados"
+          title="Reiniciar estadísticas y archivos procesados"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
@@ -1003,263 +929,6 @@ export default function FolderWatchPage() {
           <p className="text-sm text-slate-600">Rastreados</p>
         </Card>
       </div>
-
-      {/* Grid de Previsualización */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="font-semibold text-slate-900">Imágenes Procesadas</h3>
-          <span className="text-sm text-slate-500">{processedFiles.length} archivos</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-150 overflow-y-auto pr-2">
-          {processedFiles.length === 0 ? (
-            <div className="col-span-full text-center py-16 text-slate-400">
-              <Activity className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p className="text-sm">Sin imágenes procesadas</p>
-              <p className="text-xs text-slate-400 mt-1">Las imágenes aparecerán aquí al ser detectadas</p>
-            </div>
-          ) : (
-            processedFiles.map((file, index) => (
-              <div 
-                key={index}
-                className={cn(
-                  "relative group rounded-xl border-2 overflow-hidden transition-all hover:shadow-lg",
-                  file.status === 'error' && "border-red-300 bg-red-50",
-                  file.status === 'completed' && "border-green-200 bg-white hover:border-green-300",
-                  file.status === 'processing' && "border-blue-200 bg-blue-50 animate-pulse"
-                )}
-              >
-                {/* Preview de Imágenes */}
-                <div className="aspect-4/3 bg-slate-100 relative overflow-hidden">
-                  {file.originalPreview && file.status !== 'processing' ? (
-                    <div className="grid grid-cols-2 h-full">
-                      {/* Original */}
-                      <div className="relative border-r border-slate-200 bg-slate-50 flex items-center justify-center">
-                        <img 
-                          src={file.originalPreview} 
-                          alt="Original" 
-                          className="max-w-full max-h-full object-contain"
-                        />
-                        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/70 to-transparent py-1 px-2">
-                          <span className="text-[10px] text-white font-medium">Original</span>
-                        </div>
-                      </div>
-                      
-                      {/* Procesada */}
-                      <div className="relative flex items-center justify-center" style={{ 
-                        background: whiteBackground 
-                          ? '#ffffff' 
-                          : 'repeating-conic-gradient(#f1f5f9 0% 25%, #e2e8f0 0% 50%) 50% / 16px 16px'
-                      }}>
-                        {file.processedPreview && file.status === 'completed' ? (
-                          <>
-                            <img 
-                              src={file.processedPreview} 
-                              alt="Procesada" 
-                              className="max-w-full max-h-full object-contain"
-                            />
-                            <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/70 to-transparent py-1 px-2">
-                              <span className="text-[10px] text-white font-medium">Sin Fondo</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-200">
-                            <AlertCircle className="w-8 h-8 text-red-500" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      {file.status === 'processing' ? (
-                        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-                      ) : file.originalPreview ? (
-                        <img 
-                          src={file.originalPreview} 
-                          alt="Original" 
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      ) : (
-                        <Activity className="w-10 h-10 text-slate-400" />
-                      )}
-                    </div>
-                  )}
-
-                  {/* Status Badge */}
-                  <div className="absolute top-2 left-2 z-10">
-                    {file.status === 'processing' && (
-                      <Badge className="bg-blue-500 text-white shadow-md">
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Procesando
-                      </Badge>
-                    )}
-                    {file.status === 'completed' && (
-                      <Badge className="bg-green-500 text-white shadow-md">
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Listo
-                      </Badge>
-                    )}
-                    {file.status === 'error' && (
-                      <Badge className="bg-red-500 text-white shadow-md">
-                        <AlertCircle className="w-3 h-3 mr-1" />
-                        Error
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Botón de reprocesar en hover (solo para errores) */}
-                  {file.status === 'error' && file.originalPreview && (
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Button
-                        size="sm"
-                        className="bg-white text-slate-900 hover:bg-slate-100 shadow-lg"
-                        onClick={() => setReprocessingFile(file)}
-                      >
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Reprocesar
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="p-3">
-                  <p className="text-xs font-medium text-slate-900 truncate mb-1" title={file.name}>
-                    {file.name.replace(/^(📤|✅|❌)\s*/, '')}
-                  </p>
-                  
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-2">
-                      {file.time && (
-                        <span className="flex items-center gap-1">
-                          <Clock size={12} />
-                          {file.time}s
-                        </span>
-                      )}
-                      {file.modelName && (
-                        <Tooltip content={file.modelName} position="top">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            {file.modelName.split(' ')[0]}
-                          </Badge>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </div>
-
-                  {file.error && (
-                    <p className="text-xs text-red-600 mt-2 line-clamp-2" title={file.error}>
-                      {file.error}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {/* Modal de Reprocesamiento */}
-      {reprocessingFile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Reprocesar Imagen</h3>
-                  <p className="text-sm text-slate-500 mt-1">{reprocessingFile.name.replace(/^(📤|✅|❌)\s*/, '')}</p>
-                </div>
-                <button
-                  onClick={() => setReprocessingFile(null)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              {/* Preview de la imagen con error */}
-              {reprocessingFile.originalPreview && (
-                <div className="mb-6 rounded-lg overflow-hidden border-2 border-slate-200">
-                  <img 
-                    src={reprocessingFile.originalPreview} 
-                    alt="Vista previa" 
-                    className="w-full h-64 object-contain bg-slate-100"
-                  />
-                </div>
-              )}
-
-              <div className="mb-6">
-                <p className="text-sm font-medium text-slate-700 mb-3">
-                  Selecciona un modelo diferente para reprocesar:
-                </p>
-                <div className="grid md:grid-cols-2 gap-3">
-                  {bgModels
-                    .filter(m => m.version !== reprocessingFile.modelUsed)
-                    .map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={async () => {
-                          const fileName = reprocessingFile.name.replace(/^(📤|✅|❌)\s*/, '');
-                          
-                          // Recrear el File desde el preview
-                          if (reprocessingFile.originalPreview) {
-                            try {
-                              const response = await fetch(reprocessingFile.originalPreview);
-                              const blob = await response.blob();
-                              const file = new File([blob], fileName, { type: blob.type });
-                              
-                              setReprocessingFile(null);
-                              await processImage(file, fileName, model.version);
-                            } catch {
-                              error('❌ Error al reprocesar imagen');
-                            }
-                          }
-                        }}
-                        className="p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:shadow-md transition-all text-left group"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-1">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                size={12}
-                                className={i < getQualityLevel(model.quality) ? "fill-amber-400 text-amber-400" : "text-slate-300"}
-                              />
-                            ))}
-                          </div>
-                          <Badge 
-                            variant={getQualityLevel(model.quality) >= 4 ? "default" : getQualityLevel(model.quality) >= 3 ? "secondary" : "outline"}
-                            className="text-xs"
-                          >
-                            {getQualityLevel(model.quality) >= 4 ? "Premium" : getQualityLevel(model.quality) >= 3 ? "Estándar" : "Económico"}
-                          </Badge>
-                        </div>
-                        
-                        <h4 className="font-medium text-sm text-slate-900 mb-2">
-                          {model.name}
-                        </h4>
-                        
-                        <div className="flex items-center gap-2 text-xs text-slate-600">
-                          <DollarSign size={12} />
-                          <span>{getPricing(model.costPerRun)}</span>
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setReprocessingFile(null)}
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
 
       {/* Toasts */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
