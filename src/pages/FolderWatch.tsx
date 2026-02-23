@@ -131,16 +131,16 @@ export default function FolderWatchPage() {
     }
   };
 
-  const addLog = (name: string, status: 'processing' | 'completed' | 'error' = 'processing', time?: number, error?: string, originalPreview?: string, processedPreview?: string, modelUsed?: string, modelName?: string) => {
+  const addLog = (entry: Partial<ProcessedFile> & { name: string }) => {
     setProcessedFiles(prev => {
-      const existing = prev.find(f => f.name === name);
+      const existing = prev.find(f => f.name === entry.name);
       if (existing) {
-        return prev.map(f => f.name === name 
-          ? { ...f, status, time, error, originalPreview, processedPreview, modelUsed, modelName } 
+        return prev.map(f => f.name === entry.name 
+          ? { ...f, ...entry } 
           : f
         );
       }
-      return [{ name, status, time, error, originalPreview, processedPreview, modelUsed, modelName }, ...prev].slice(0, 100);
+      return [{ status: 'processing', ...entry } as ProcessedFile, ...prev].slice(0, 100);
     });
   };
 
@@ -164,7 +164,7 @@ export default function FolderWatchPage() {
       // Crear preview de la imagen original
       const originalPreview = URL.createObjectURL(file);
 
-      addLog(`📤 ${fileName}`, 'processing', undefined, undefined, originalPreview);
+      addLog({ name: `📤 ${fileName}`, status: 'processing', originalPreview });
 
       // Sanitizar nombre de archivo para evitar path traversal
       const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -270,16 +270,15 @@ export default function FolderWatchPage() {
       const processedPreview = data.outputUrl;
 
       const processingTime = Math.round((Date.now() - startTime) / 1000);
-      addLog(
-        `✅ ${fileName}`, 
-        'completed', 
-        processingTime, 
-        undefined, 
-        originalPreview, 
-        processedPreview, 
-        model,
-        modelInfo?.name
-      );
+      addLog({
+        name: `✅ ${fileName}`,
+        status: 'completed',
+        time: processingTime,
+        originalPreview,
+        processedPreview,
+        modelUsed: model,
+        modelName: modelInfo?.name
+      });
       
       setStats(prev => ({
         total: prev.total + 1,
@@ -287,24 +286,11 @@ export default function FolderWatchPage() {
         errors: prev.errors
       }));
 
-      // Limpiar archivos temporales en Firebase Storage
-      const filesToDelete: string[] = [filePath];
-      
-      // También eliminar la imagen procesada del storage si existe
-      if (data.outputUrl) {
-        const processedPath = data.outputUrl.split('/temp-workplace/').pop();
-        if (processedPath) {
-          filesToDelete.push(processedPath);
-        }
-      }
-      
+      // Limpiar archivo temporal de Firebase Storage (solo el input que subimos)
       try {
-        // Eliminar archivo temporal de Firebase Storage
-        for (const file of filesToDelete) {
-          await deleteFile(file);
-        }
+        await deleteFile(filePath);
       } catch {
-        // Error no crítico al limpiar archivos temporales
+        // Error no crítico al limpiar archivo temporal
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
@@ -331,7 +317,12 @@ export default function FolderWatchPage() {
       const existingFile = processedFiles.find(f => f.name === fileName);
       const originalPreview = existingFile?.originalPreview;
       
-      addLog(`❌ ${fileName}`, 'error', undefined, userFriendlyError, originalPreview);
+      addLog({ 
+        name: `❌ ${fileName}`, 
+        status: 'error', 
+        error: userFriendlyError, 
+        originalPreview 
+      });
       setStats(prev => ({
         total: prev.total + 1,
         success: prev.success,
@@ -364,10 +355,10 @@ export default function FolderWatchPage() {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
       
       if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
-        addLog('⚠️ Error: Sin permisos para acceder a la carpeta', 'error');
+        addLog({ name: '⚠️ Error: Sin permisos para acceder a la carpeta', status: 'error' });
         stopMonitoring();
       } else {
-        addLog(`⚠️ Error al escanear carpeta: ${errorMsg}`, 'error');
+        addLog({ name: `⚠️ Error al escanear carpeta: ${errorMsg}`, status: 'error' });
       }
     }
   };
@@ -388,9 +379,9 @@ export default function FolderWatchPage() {
       const item = processingQueueRef.current.shift();
       if (item) {
         await processImage(item.file, item.name);
-        // Delay de 12 segundos entre imágenes (Replicate permite 6 req/min)
+        // Delay de 10 segundos entre imágenes (Replicate permite 6 req/min = 1 cada 10s)
         if (processingQueueRef.current.length > 0 && isMonitoringRef.current) {
-          await new Promise(resolve => setTimeout(resolve, 12000));
+          await new Promise(resolve => setTimeout(resolve, 10000));
         }
       }
     }
@@ -401,6 +392,12 @@ export default function FolderWatchPage() {
   const startMonitoring = () => {
     if (!inputDir || !outputDir) {
       error('❌ Selecciona las carpetas primero');
+      return;
+    }
+
+    // Validar que las carpetas no sean la misma
+    if (inputDir.name === outputDir.name) {
+      error('❌ Las carpetas de entrada y salida deben ser diferentes');
       return;
     }
 
@@ -416,20 +413,20 @@ export default function FolderWatchPage() {
 
     setIsMonitoring(true);
     isMonitoringRef.current = true;
-    addLog('🚀 Monitoreo iniciado');
-    info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
+    addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
+    info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
     
     scanFolder();
     
     intervalRef.current = setInterval(() => {
       scanFolder();
-    }, 3000);
+    }, 5000);
   };
 
   const stopMonitoring = () => {
     setIsMonitoring(false);
     isMonitoringRef.current = false;
-    addLog('⏸️ Monitoreo detenido');
+    addLog({ name: '⏸️ Monitoreo detenido', status: 'completed' });
     info('⏸️ Monitoreo detenido - Cancelando procesamiento pendiente');
     
     if (intervalRef.current) {
@@ -441,8 +438,11 @@ export default function FolderWatchPage() {
   const clearLogs = () => {
     // Liberar Object URLs para prevenir memory leaks
     processedFiles.forEach(file => {
-      if (file.originalPreview && file.originalPreview.startsWith('blob:')) {
+      if (file.originalPreview?.startsWith('blob:')) {
         URL.revokeObjectURL(file.originalPreview);
+      }
+      if (file.processedPreview?.startsWith('blob:')) {
+        URL.revokeObjectURL(file.processedPreview);
       }
     });
 
@@ -463,8 +463,11 @@ export default function FolderWatchPage() {
 
       // Liberar Object URLs para prevenir memory leaks
       processedFiles.forEach(file => {
-        if (file.originalPreview && file.originalPreview.startsWith('blob:')) {
+        if (file.originalPreview?.startsWith('blob:')) {
           URL.revokeObjectURL(file.originalPreview);
+        }
+        if (file.processedPreview?.startsWith('blob:')) {
+          URL.revokeObjectURL(file.processedPreview);
         }
       });
     };
@@ -535,7 +538,7 @@ export default function FolderWatchPage() {
           <Alert className="bg-green-50 border-green-300">
             <Activity className="h-5 w-5 text-green-600 animate-pulse" />
             <AlertDescription className="ml-2 text-green-800">
-              <strong>Monitoreo en curso</strong> - Escaneando carpeta cada 3 segundos. Las nuevas imágenes se procesarán automáticamente.
+              <strong>Monitoreo en curso</strong> - Escaneando carpeta cada 5 segundos. Las nuevas imágenes se procesarán automáticamente.
             </AlertDescription>
           </Alert>
         )}
