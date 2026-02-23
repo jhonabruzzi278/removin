@@ -1,8 +1,10 @@
 import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 
 // Inicializar Firebase Admin SDK
 // En producción, usa las variables de entorno de Vercel
 let firebaseAdmin;
+let firestoreDb = null;
 
 /**
  * Procesar la clave privada para manejar diferentes formatos
@@ -130,7 +132,8 @@ export async function getUserReplicateToken(uid) {
   }
 
   try {
-    const db = firebase.firestore();
+    // Usar getFirestore() de firebase-admin/firestore
+    const db = getFirestore();
     const doc = await db.collection('users').doc(uid).get();
     
     if (!doc.exists) {
@@ -160,10 +163,13 @@ export async function saveUserReplicateToken(uid, token) {
 
   try {
     console.log('📝 Intentando guardar en Firestore...');
-    const db = firebase.firestore();
+    // Usar getFirestore() de firebase-admin/firestore
+    const db = getFirestore();
+    const { FieldValue } = await import('firebase-admin/firestore');
+    
     await db.collection('users').doc(uid).set({
       replicateToken: token,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
     console.log('✅ Token guardado exitosamente');
