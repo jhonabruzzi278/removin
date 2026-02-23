@@ -22,9 +22,22 @@ function initializeFirebase() {
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
     };
 
+    // Log para debugging
+    console.log('🔧 Firebase Config Check:', {
+      hasProjectId: !!serviceAccount.projectId,
+      hasClientEmail: !!serviceAccount.clientEmail,
+      hasPrivateKey: !!serviceAccount.privateKey,
+      privateKeyLength: serviceAccount.privateKey?.length || 0,
+      privateKeyStart: serviceAccount.privateKey?.substring(0, 30)
+    });
+
     // Verificar que tenemos las credenciales
     if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
-      console.warn('⚠️ Firebase Admin no configurado. Algunas funciones no estarán disponibles.');
+      console.warn('⚠️ Firebase Admin no configurado. Faltan credenciales:', {
+        projectId: !!serviceAccount.projectId,
+        clientEmail: !!serviceAccount.clientEmail,
+        privateKey: !!serviceAccount.privateKey
+      });
       return null;
     }
 
@@ -33,10 +46,11 @@ function initializeFirebase() {
     });
 
     firebaseAdmin = admin;
-    console.log('✅ Firebase Admin inicializado');
+    console.log('✅ Firebase Admin inicializado correctamente');
     return firebaseAdmin;
   } catch (error) {
-    console.error('Error inicializando Firebase Admin:', error.message);
+    console.error('❌ Error inicializando Firebase Admin:', error.message);
+    console.error('❌ Stack:', error.stack);
     return null;
   }
 }
@@ -96,23 +110,29 @@ export async function getUserReplicateToken(uid) {
  * Guardar token de Replicate del usuario en Firestore
  */
 export async function saveUserReplicateToken(uid, token) {
+  console.log('📝 saveUserReplicateToken llamado para uid:', uid?.slice(0, 8));
+  
   const firebase = initializeFirebase();
   
   if (!firebase) {
+    console.error('❌ Firebase Admin no está inicializado');
     return { success: false, error: 'Firebase Admin no configurado' };
   }
 
   try {
+    console.log('📝 Intentando guardar en Firestore...');
     const db = firebase.firestore();
     await db.collection('users').doc(uid).set({
       replicateToken: token,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
+    console.log('✅ Token guardado exitosamente');
     return { success: true, error: null };
   } catch (error) {
-    console.error('Error guardando token:', error.message);
-    return { success: false, error: 'Error al guardar token' };
+    console.error('❌ Error guardando token:', error.message);
+    console.error('❌ Error completo:', error);
+    return { success: false, error: `Error al guardar token: ${error.message}` };
   }
 }
 
