@@ -38,7 +38,7 @@ export default function FolderWatchPage() {
   const observerRef = useRef<any>(null);
   const processedNamesRef = useRef<Set<string>>(new Set());
   const snapshotRef = useRef<Set<string>>(new Set());
-  const processingQueueRef = useRef<Array<{ file: File; name: string }>>([]);
+  const processingQueueRef = useRef<Array<{ file?: File; handle?: any; name: string }>>([]);
   const isProcessingRef = useRef(false);
   const isMonitoringRef = useRef(false);
   const whiteBackgroundRef = useRef(whiteBackground);
@@ -210,6 +210,28 @@ export default function FolderWatchPage() {
         error('❌ Error al seleccionar carpeta de salida');
       }
     }
+  };
+
+  const waitForFileReady = async (handle: any): Promise<File> => {
+    let prevFile = await handle.getFile();
+    let retries = 0;
+    
+    // Esperar hasta que el archivo termine de copiarse al disco (máximo 10 segundos)
+    while (retries < 20) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const currFile = await handle.getFile();
+      
+      // Si el tamaño es mayor a 0, y no ha mutado desde la última comprobación, está listo.
+      if (currFile.size > 0 && 
+          currFile.size === prevFile.size && 
+          currFile.lastModified === prevFile.lastModified) {
+        return currFile; 
+      }
+      
+      prevFile = currFile;
+      retries++;
+    }
+    return prevFile;
   };
 
   const processImage = async (file: File, fileName: string, modelVersion?: string) => {
@@ -442,7 +464,7 @@ export default function FolderWatchPage() {
               newFilesFound++;
               processedNamesRef.current.add(file.name);
               setTrackedCount(processedNamesRef.current.size);
-              processingQueueRef.current.push({ file, name: file.name });
+              processingQueueRef.current.push({ handle: entry, name: file.name });
               console.log(`[Escaneo] ✅ Archivo NUEVO detectado: ${file.name}`);
             }
           }
@@ -473,17 +495,28 @@ export default function FolderWatchPage() {
     isProcessingRef.current = true;
     
     while (processingQueueRef.current.length > 0) {
-      // Verificar si el monitoreo sigue activo (permite detener la cola)
       if (!isMonitoringRef.current) {
-        // Monitoreo detenido, cancelando cola de procesamiento
-        processingQueueRef.current = []; // Limpiar cola
+        processingQueueRef.current = []; // Limpiar cola si se detuvo
         break;
       }
 
       const item = processingQueueRef.current.shift();
       if (item) {
-        await processImage(item.file, item.name);
-        // Delay de 10 segundos entre imágenes (Replicate permite 6 req/min = 1 cada 10s)
+        try {
+          // Obtener el archivo fresco y estable (espera a que OS termine de copiarlo)
+          let fileToProcess = item.file;
+          if (item.handle) {
+            fileToProcess = await waitForFileReady(item.handle);
+          }
+          
+          if (fileToProcess) {
+            await processImage(fileToProcess, item.name);
+          }
+        } catch (err) {
+          console.error("Error al estabilizar archivo:", err);
+        }
+
+        // Delay de seguridad entre imágenes para no saturar Replicate
         if (processingQueueRef.current.length > 0 && isMonitoringRef.current) {
           await new Promise(resolve => setTimeout(resolve, 10000));
         }
@@ -556,7 +589,7 @@ export default function FolderWatchPage() {
                     console.log(`[Observer] ✅ Archivo NUEVO vía Observer: ${file.name}`);
                     processedNamesRef.current.add(file.name);
                     setTrackedCount(processedNamesRef.current.size);
-                    processingQueueRef.current.push({ file, name: file.name });
+                    processingQueueRef.current.push({ handle, name: file.name });
                     hasNewFiles = true;
                   }
                 }
