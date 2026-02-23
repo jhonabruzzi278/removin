@@ -4,7 +4,27 @@ import { getFirestore } from 'firebase-admin/firestore';
 // Inicializar Firebase Admin SDK
 // En producción, usa las variables de entorno de Vercel
 let firebaseAdmin;
-let firestoreDb = null;
+let firestoreInstance = null;
+
+/**
+ * Obtener instancia de Firestore
+ */
+function getDb() {
+  if (firestoreInstance) return firestoreInstance;
+  
+  const app = initializeFirebase();
+  if (!app) return null;
+  
+  // Intentar obtener Firestore con el databaseId explícito
+  try {
+    firestoreInstance = getFirestore(app, '(default)');
+  } catch (e) {
+    // Si falla, intentar sin especificar databaseId
+    firestoreInstance = getFirestore(app);
+  }
+  
+  return firestoreInstance;
+}
 
 /**
  * Procesar la clave privada para manejar diferentes formatos
@@ -132,8 +152,11 @@ export async function getUserReplicateToken(uid) {
   }
 
   try {
-    // Usar getFirestore() de firebase-admin/firestore
-    const db = getFirestore();
+    const db = getDb();
+    if (!db) {
+      return { token: null, error: 'No se pudo conectar a Firestore' };
+    }
+    
     const doc = await db.collection('users').doc(uid).get();
     
     if (!doc.exists) {
@@ -163,8 +186,12 @@ export async function saveUserReplicateToken(uid, token) {
 
   try {
     console.log('📝 Intentando guardar en Firestore...');
-    // Usar getFirestore() de firebase-admin/firestore
-    const db = getFirestore();
+    const db = getDb();
+    if (!db) {
+      console.error('❌ No se pudo obtener instancia de Firestore');
+      return { success: false, error: 'No se pudo conectar a Firestore' };
+    }
+    
     const { FieldValue } = await import('firebase-admin/firestore');
     
     await db.collection('users').doc(uid).set({
@@ -181,4 +208,4 @@ export async function saveUserReplicateToken(uid, token) {
   }
 }
 
-export { initializeFirebase };
+export { initializeFirebase, getDb };

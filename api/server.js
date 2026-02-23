@@ -89,29 +89,33 @@ app.get('/api/debug', async (req, res) => {
   let initError = null;
   
   try {
-    const { initializeFirebase } = await import('./lib/firebase-admin.js');
-    const { getFirestore, FieldValue } = await import('firebase-admin/firestore');
+    const { initializeFirebase, getDb } = await import('./lib/firebase-admin.js');
+    const { FieldValue } = await import('firebase-admin/firestore');
     const firebase = initializeFirebase();
     
     if (firebase) {
       firebaseStatus = 'initialized';
       
-      // Intentar acceder a Firestore usando getFirestore()
+      // Intentar acceder a Firestore usando getDb()
       try {
-        const db = getFirestore();
-        firestoreStatus = 'accessible';
-        
-        // Intentar escribir un documento de prueba
-        try {
-          const testRef = db.collection('_test').doc('debug');
-          await testRef.set({
-            test: true,
-            timestamp: FieldValue.serverTimestamp()
-          });
-          await testRef.delete(); // Limpiar después
-          writeTestStatus = 'success';
-        } catch (writeError) {
-          writeTestStatus = `error: ${writeError.code} - ${writeError.message}`;
+        const db = getDb();
+        if (db) {
+          firestoreStatus = 'accessible';
+          
+          // Intentar escribir un documento de prueba
+          try {
+            const testRef = db.collection('_test').doc('debug');
+            await testRef.set({
+              test: true,
+              timestamp: FieldValue.serverTimestamp()
+            });
+            await testRef.delete(); // Limpiar después
+            writeTestStatus = 'success';
+          } catch (writeError) {
+            writeTestStatus = `error: ${writeError.code} - ${writeError.message}`;
+          }
+        } else {
+          firestoreStatus = 'getDb returned null';
         }
       } catch (fsError) {
         firestoreStatus = `error: ${fsError.message}`;
