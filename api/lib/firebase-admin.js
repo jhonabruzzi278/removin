@@ -21,8 +21,14 @@ function getDb() {
   }
   
   try {
-    // Usar admin.firestore() en lugar de getFirestore()
+    // Usar admin.firestore() y configurar settings
     firestoreInstance = admin.firestore();
+    
+    // Configurar settings para evitar problemas de conexión
+    firestoreInstance.settings({
+      ignoreUndefinedProperties: true
+    });
+    
     return firestoreInstance;
   } catch (e) {
     console.error('❌ Error obteniendo Firestore:', e.message);

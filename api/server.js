@@ -87,6 +87,7 @@ app.get('/api/debug', async (req, res) => {
   let firestoreStatus = 'not tested';
   let writeTestStatus = 'not tested';
   let initError = null;
+  let projectInfo = null;
   
   try {
     const { initializeFirebase, getDb } = await import('./lib/firebase-admin.js');
@@ -95,6 +96,15 @@ app.get('/api/debug', async (req, res) => {
     
     if (firebase) {
       firebaseStatus = 'initialized';
+      
+      // Obtener info del proyecto
+      if (admin.apps.length > 0) {
+        const app = admin.apps[0];
+        projectInfo = {
+          name: app.name,
+          projectId: app.options?.projectId || 'unknown'
+        };
+      }
       
       // Intentar acceder a Firestore usando getDb()
       try {
@@ -112,7 +122,7 @@ app.get('/api/debug', async (req, res) => {
             await testRef.delete(); // Limpiar después
             writeTestStatus = 'success';
           } catch (writeError) {
-            writeTestStatus = `error: ${writeError.code} - ${writeError.message}`;
+            writeTestStatus = `error: ${writeError.code} - ${writeError.message} - ${writeError.details || ''}`;
           }
         } else {
           firestoreStatus = 'getDb returned null';
@@ -131,16 +141,17 @@ app.get('/api/debug', async (req, res) => {
   res.json({
     env: {
       hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
+      projectId: process.env.FIREBASE_PROJECT_ID,
       hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
       hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
       privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
-      privateKeyStart: process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50),
       hasServiceAccountJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON
     },
     firebase: {
       status: firebaseStatus,
       firestoreStatus,
       writeTestStatus,
+      projectInfo,
       initError
     },
     timestamp: new Date().toISOString()
