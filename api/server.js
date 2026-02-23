@@ -85,6 +85,7 @@ app.get('/api/debug', async (req, res) => {
   // Intentar inicializar Firebase para ver si hay errores
   let firebaseStatus = 'not initialized';
   let firestoreStatus = 'not tested';
+  let writeTestStatus = 'not tested';
   let initError = null;
   
   try {
@@ -97,8 +98,20 @@ app.get('/api/debug', async (req, res) => {
       // Intentar acceder a Firestore
       try {
         const db = firebase.firestore();
-        // Solo verificamos que podemos acceder, no hacemos lectura real
         firestoreStatus = 'accessible';
+        
+        // Intentar escribir un documento de prueba
+        try {
+          const testRef = db.collection('_test').doc('debug');
+          await testRef.set({
+            test: true,
+            timestamp: new Date().toISOString()
+          });
+          await testRef.delete(); // Limpiar después
+          writeTestStatus = 'success';
+        } catch (writeError) {
+          writeTestStatus = `error: ${writeError.message}`;
+        }
       } catch (fsError) {
         firestoreStatus = `error: ${fsError.message}`;
       }
@@ -122,6 +135,7 @@ app.get('/api/debug', async (req, res) => {
     firebase: {
       status: firebaseStatus,
       firestoreStatus,
+      writeTestStatus,
       initError
     },
     timestamp: new Date().toISOString()
