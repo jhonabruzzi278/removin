@@ -78,15 +78,48 @@ app.get('/api/health', (req, res) => {
 // ============================================
 // GET /api/debug - Debug de configuración (TEMPORAL)
 // ============================================
-app.get('/api/debug', (req, res) => {
+app.get('/api/debug', async (req, res) => {
+  // Intentar inicializar Firebase para ver si hay errores
+  let firebaseStatus = 'not initialized';
+  let firestoreStatus = 'not tested';
+  let initError = null;
+  
+  try {
+    const { initializeFirebase } = await import('./lib/firebase-admin.js');
+    const firebase = initializeFirebase();
+    
+    if (firebase) {
+      firebaseStatus = 'initialized';
+      
+      // Intentar acceder a Firestore
+      try {
+        const db = firebase.firestore();
+        // Solo verificamos que podemos acceder, no hacemos lectura real
+        firestoreStatus = 'accessible';
+      } catch (fsError) {
+        firestoreStatus = `error: ${fsError.message}`;
+      }
+    } else {
+      firebaseStatus = 'failed - returned null';
+    }
+  } catch (err) {
+    initError = err.message;
+    firebaseStatus = 'init error';
+  }
+  
   res.json({
     env: {
       hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
       hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
       hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
       privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
-      privateKeyStart: process.env.FIREBASE_PRIVATE_KEY?.substring(0, 30),
+      privateKeyStart: process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50),
       hasServiceAccountJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+    },
+    firebase: {
+      status: firebaseStatus,
+      firestoreStatus,
+      initError
     },
     timestamp: new Date().toISOString()
   });
