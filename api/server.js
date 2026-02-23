@@ -74,87 +74,10 @@ async function authenticateUser(req, res, next) {
 // ============================================
 // GET /api/health
 // ============================================
+// GET /api/health
+// ============================================
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ============================================
-// GET /api/debug - Debug de configuración (TEMPORAL)
-// ============================================
-app.get('/api/debug', async (req, res) => {
-  let firebaseStatus = 'not initialized';
-  let realtimeDbStatus = 'not tested';
-  let writeTestStatus = 'not tested';
-  let initError = null;
-  let projectInfo = null;
-  
-  try {
-    const { initializeFirebase, getDb } = await import('./lib/firebase-admin.js');
-    const admin = (await import('firebase-admin')).default;
-    const firebase = initializeFirebase();
-    
-    if (firebase) {
-      firebaseStatus = 'initialized';
-      
-      // Obtener info del proyecto
-      if (admin.apps.length > 0) {
-        const app = admin.apps[0];
-        projectInfo = {
-          name: app.name,
-          projectId: app.options?.projectId || 'unknown',
-          databaseURL: app.options?.databaseURL || 'not set'
-        };
-      }
-      
-      // Intentar acceder a Realtime Database
-      try {
-        const db = getDb();
-        if (db) {
-          realtimeDbStatus = 'accessible';
-          
-          // Intentar escribir en Realtime Database
-          try {
-            const testRef = db.ref('_test/debug');
-            await testRef.set({
-              test: true,
-              timestamp: Date.now()
-            });
-            await testRef.remove(); // Limpiar después
-            writeTestStatus = 'success';
-          } catch (writeError) {
-            writeTestStatus = `error: ${writeError.code || 'unknown'} - ${writeError.message}`;
-          }
-        } else {
-          realtimeDbStatus = 'getDb returned null';
-        }
-      } catch (dbError) {
-        realtimeDbStatus = `error: ${dbError.message}`;
-      }
-    } else {
-      firebaseStatus = 'failed - returned null';
-    }
-  } catch (err) {
-    initError = err.message;
-    firebaseStatus = 'init error';
-  }
-  
-  res.json({
-    env: {
-      hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
-      hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
-      privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0
-    },
-    firebase: {
-      status: firebaseStatus,
-      realtimeDbStatus,
-      writeTestStatus,
-      projectInfo,
-      initError
-    },
-    timestamp: new Date().toISOString()
-  });
 });
 
 // ============================================
