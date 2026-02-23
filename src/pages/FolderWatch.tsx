@@ -126,6 +126,7 @@ export default function FolderWatchPage() {
       setInputDir(dirHandle);
       // No limpiar processedNamesRef cuando se cambia de carpeta
       // para permitir iniciar monitoreo sin procesar archivos viejos
+      addLog({ name: `📁 Carpeta de entrada: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
@@ -145,6 +146,7 @@ export default function FolderWatchPage() {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
       setOutputDir(dirHandle);
+      addLog({ name: `💾 Carpeta de salida: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
@@ -185,6 +187,8 @@ export default function FolderWatchPage() {
 
       // Crear preview de la imagen original
       const originalPreview = URL.createObjectURL(file);
+
+      addLog({ name: `📤 ${fileName}`, status: 'processing', originalPreview });
 
       // Sanitizar nombre de archivo para evitar path traversal
       const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -448,6 +452,7 @@ export default function FolderWatchPage() {
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     setScanCount(0);
+    addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
     info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
     
     // Primer escaneo inmediato
@@ -462,6 +467,7 @@ export default function FolderWatchPage() {
   const stopMonitoring = () => {
     setIsMonitoring(false);
     isMonitoringRef.current = false;
+    addLog({ name: '⏸️ Monitoreo detenido', status: 'completed' });
     info('⏸️ Monitoreo detenido - Cancelando procesamiento pendiente');
     
     if (intervalRef.current) {
