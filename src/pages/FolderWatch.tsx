@@ -11,10 +11,11 @@ import { uploadFile, getPublicUrl, deleteFile } from '@/lib/firebase';
 import { apiClient } from '@/lib/api';
 import { availableModels, type AIModel } from '@/data/models';
 import { cn } from '@/lib/utils';
+import { get, set } from 'idb-keyval';
 import {
   Folder, Play, Pause, Trash2, CheckCircle2,
   AlertCircle, Loader2, Info, Activity, HelpCircle, 
-  RefreshCw, X, Star, Clock, DollarSign
+  RefreshCw, X, Star, Clock, DollarSign, Zap
 } from 'lucide-react';
 
 interface ProcessedFile {
@@ -44,8 +45,12 @@ export default function FolderWatchPage() {
   const [checkingToken, setCheckingToken] = useState(true);
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [reprocessingFile, setReprocessingFile] = useState<ProcessedFile | null>(null);
+  const [useObserver, setUseObserver] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const observerRef = useRef<any>(null);
   const processedNamesRef = useRef<Set<string>>(new Set());
+  const snapshotRef = useRef<Set<string>>(new Set());
   const processingQueueRef = useRef<Array<{ file: File; name: string }>>([]);
   const isProcessingRef = useRef(false);
   const isMonitoringRef = useRef(false);
@@ -53,6 +58,7 @@ export default function FolderWatchPage() {
   const selectedModelRef = useRef(selectedModel);
 
   const isSupported = 'showDirectoryPicker' in window;
+  const hasObserverAPI = 'FileSystemObserver' in self;
   
   // Filtrar a 3 modelos principales: económico, estándar y premium
   const bgModels = availableModels.filter(m => 
@@ -120,12 +126,66 @@ export default function FolderWatchPage() {
     checkToken();
   }, [user]);
 
+  // RF-3: Restaurar carpetas guardadas desde IndexedDB al montar
+  useEffect(() => {
+    const restoreFolders = async () => {
+      try {
+        const inputHandle = await get<FileSystemDirectoryHandle>('folderwatch-input');
+        const outputHandle = await get<FileSystemDirectoryHandle>('folderwatch-output');
+        
+        if (inputHandle) {
+          // Verificar y solicitar permisos si es necesario
+          const inputPermission = await (inputHandle as any).queryPermission({ mode: 'read' });
+          if (inputPermission === 'granted' || inputPermission === 'prompt') {
+            if (inputPermission === 'prompt') {
+              const granted = await (inputHandle as any).requestPermission({ mode: 'read' });
+              if (granted === 'granted') {
+                setInputDir(inputHandle);
+                info('📁 Carpeta de entrada restaurada');
+              }
+            } else {
+              setInputDir(inputHandle);
+              info('📁 Carpeta de entrada restaurada');
+            }
+          }
+        }
+        
+        if (outputHandle) {
+          const outputPermission = await (outputHandle as any).queryPermission({ mode: 'readwrite' });
+          if (outputPermission === 'granted' || outputPermission === 'prompt') {
+            if (outputPermission === 'prompt') {
+              const granted = await (outputHandle as any).requestPermission({ mode: 'readwrite' });
+              if (granted === 'granted') {
+                setOutputDir(outputHandle);
+                info('💾 Carpeta de salida restaurada');
+              }
+            } else {
+              setOutputDir(outputHandle);
+              info('💾 Carpeta de salida restaurada');
+            }
+          }
+        }
+      } catch (err) {
+        // Error al restaurar carpetas (puede ser que no existan o permisos revocados)
+        console.log('No se pudieron restaurar carpetas guardadas');
+      } finally {
+        setIsRestoring(false);
+      }
+    };
+    
+    if (isSupported) {
+      restoreFolders();
+    } else {
+      setIsRestoring(false);
+    }
+  }, []);
+
   const selectInputFolder = async () => {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
       setInputDir(dirHandle);
-      // No limpiar processedNamesRef cuando se cambia de carpeta
-      // para permitir iniciar monitoreo sin procesar archivos viejos
+      // RF-3: Guardar en IndexedDB para persistencia
+      await set('folderwatch-input', dirHandle);
       addLog({ name: `📁 Carpeta de entrada: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
     } catch (err) {
@@ -146,6 +206,8 @@ export default function FolderWatchPage() {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
       setOutputDir(dirHandle);
+      // RF-3: Guardar en IndexedDB para persistencia
+      await set('folderwatch-output', dirHandle);
       addLog({ name: `💾 Carpeta de salida: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
     } catch (err) {
@@ -355,6 +417,30 @@ export default function FolderWatchPage() {
     }
   };
 
+  // RF-2: Crear snapshot inicial de archivos existentes (para ignorarlos)
+  const createSnapshot = async () => {
+    if (!inputDir) return;
+    
+    try {
+      const snapshot = new Set<string>();
+      for await (const entry of inputDir.values()) {
+        if (entry.kind === 'file') {
+          const file = await entry.getFile();
+          if (file.type.startsWith('image/')) {
+            snapshot.add(file.name);
+          }
+        }
+      }
+      snapshotRef.current = snapshot;
+      info(`📸 Snapshot creado: ${snapshot.size} archivos existentes serán ignorados`);
+      return snapshot.size;
+    } catch (error) {
+      console.error('Error al crear snapshot:', error);
+      return 0;
+    }
+  };
+
+  // RF-2: Escaneo optimizado que compara contra snapshot (solo para fallback)
   const scanFolder = async () => {
     if (!inputDir || !outputDir) return;
     
@@ -374,18 +460,17 @@ export default function FolderWatchPage() {
           if (file.type.startsWith('image/')) {
             filesFound++;
             
-            if (!processedNamesRef.current.has(file.name)) {
+            // RF-2: Solo procesar si NO está en el snapshot inicial
+            if (!snapshotRef.current.has(file.name) && !processedNamesRef.current.has(file.name)) {
               newFilesFound++;
               processedNamesRef.current.add(file.name);
               setTrackedCount(processedNamesRef.current.size);
-              // Agregar a la cola en lugar de procesar inmediatamente
               processingQueueRef.current.push({ file, name: file.name });
             }
           }
         }
       }
       
-      // Procesar la cola con delay
       if (newFilesFound > 0) {
         processQueue();
       }
@@ -427,13 +512,12 @@ export default function FolderWatchPage() {
     isProcessingRef.current = false;
   };
 
-  const startMonitoring = () => {
+  const startMonitoring = async () => {
     if (!inputDir || !outputDir) {
       error('❌ Selecciona las carpetas primero');
       return;
     }
 
-    // Validar que las carpetas no sean la misma
     if (inputDir.name === outputDir.name) {
       error('❌ Las carpetas de entrada y salida deben ser diferentes');
       return;
@@ -453,15 +537,63 @@ export default function FolderWatchPage() {
     isMonitoringRef.current = true;
     setScanCount(0);
     addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
-    info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
     
-    // Primer escaneo inmediato
-    scanFolder();
+    // RF-2: Crear snapshot de archivos existentes
+    const existingCount = await createSnapshot();
+    info(`📸 Snapshot creado: ${existingCount} archivos existentes ignorados`);
     
-    // Configurar escaneo automático cada 5 segundos
-    intervalRef.current = setInterval(() => {
+    // RF-1: Intentar usar FileSystemObserver si está disponible
+    if (hasObserverAPI && typeof (self as any).FileSystemObserver !== 'undefined') {
+      try {
+        const Observer = (self as any).FileSystemObserver;
+        const observer = new Observer(async (records: any[]) => {
+          for (const record of records) {
+            // RF-1: Solo reaccionar a archivos nuevos (appeared)
+            if (record.type === 'appeared' || record.type === 'modified') {
+              try {
+                const handle = record.root || record.changedHandle;
+                if (handle && handle.kind === 'file') {
+                  const file = await handle.getFile();
+                  
+                  if (file.type.startsWith('image/') && !processedNamesRef.current.has(file.name)) {
+                    processedNamesRef.current.add(file.name);
+                    setTrackedCount(processedNamesRef.current.size);
+                    processingQueueRef.current.push({ file, name: file.name });
+                    processQueue();
+                  }
+                }
+              } catch (err) {
+                console.error('Error procesando evento del observer:', err);
+              }
+            }
+          }
+        });
+        
+        await observer.observe(inputDir, { recursive: false });
+        observerRef.current = observer;
+        setUseObserver(true);
+        info(`⚡ Monitoreo reactivo activo (FileSystemObserver) - Detección instantánea`);
+      } catch (err) {
+        console.error('Error al inicializar FileSystemObserver:', err);
+        // Caer al fallback
+        setUseObserver(false);
+        info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
+        intervalRef.current = setInterval(() => {
+          scanFolder();
+        }, 5000);
+      }
+    } else {
+      // RF-2: Fallback con polling optimizado
+      setUseObserver(false);
+      info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 5 segundos`);
+      
+      // Primer escaneo inmediato
       scanFolder();
-    }, 5000);
+      
+      intervalRef.current = setInterval(() => {
+        scanFolder();
+      }, 5000);
+    }
   };
 
   const stopMonitoring = () => {
@@ -470,10 +602,23 @@ export default function FolderWatchPage() {
     addLog({ name: '⏸️ Monitoreo detenido', status: 'completed' });
     info('⏸️ Monitoreo detenido - Cancelando procesamiento pendiente');
     
+    // RF-1: Desconectar FileSystemObserver si está activo
+    if (observerRef.current) {
+      try {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      } catch (err) {
+        console.error('Error al desconectar observer:', err);
+      }
+    }
+    
+    // Limpiar intervalo si existe
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    
+    setUseObserver(false);
   };
 
   const clearLogs = () => {
@@ -490,6 +635,7 @@ export default function FolderWatchPage() {
     setProcessedFiles([]);
     setStats({ total: 0, success: 0, errors: 0 });
     processedNamesRef.current.clear();
+    snapshotRef.current.clear();
     setTrackedCount(0);
     success('✅ Registro limpiado');
   };
@@ -503,9 +649,18 @@ export default function FolderWatchPage() {
     scanFolder();
   };
 
-  // Cleanup al desmontar: liberar Object URLs y detener monitoreo
+  // Cleanup al desmontar: liberar Object URLs, detener monitoreo y desconectar observer
   useEffect(() => {
     return () => {
+      // RF-1: Desconectar FileSystemObserver
+      if (observerRef.current) {
+        try {
+          observerRef.current.disconnect();
+        } catch (err) {
+          console.error('Error al desconectar observer en cleanup:', err);
+        }
+      }
+      
       // Detener monitoreo
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -584,18 +739,50 @@ export default function FolderWatchPage() {
           </div>
         </div>
 
+        {/* Alerta de restauración de carpetas */}
+        {isRestoring && (
+          <Alert className="bg-blue-50 border-blue-300">
+            <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+            <AlertDescription className="ml-2 text-blue-800">
+              <strong>Restaurando carpetas...</strong> Verificando carpetas guardadas previamente.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Alerta de monitoreo activo */}
         {isMonitoring && (
           <Alert className="bg-green-50 border-green-300">
             <Activity className="h-5 w-5 text-green-600 animate-pulse" />
             <AlertDescription className="ml-2 text-green-800 flex items-center justify-between">
-              <div>
-                <strong>Monitoreo en curso</strong> - Escaneando carpeta cada 5 segundos. Las nuevas imágenes se procesarán automáticamente.
-                {lastScanTime && (
-                  <div className="text-xs text-green-700 mt-1 flex items-center gap-2">
-                    <Clock size={12} />
-                    <span>Último escaneo: {getTimeSinceLastScan()} (Escaneo #{scanCount})</span>
-                  </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <strong>Monitoreo en curso</strong>
+                  {useObserver ? (
+                    <Badge className="bg-emerald-500 text-white text-xs flex items-center gap-1">
+                      <Zap size={10} />
+                      Detección Instantánea
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-blue-500 text-white text-xs flex items-center gap-1">
+                      <Clock size={10} />
+                      Escaneo 5s
+                    </Badge>
+                  )}
+                </div>
+                {useObserver ? (
+                  <p className="text-xs">
+                    Usando FileSystemObserver - Las imágenes nuevas se detectan instantáneamente sin consumir CPU.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs">Escaneando carpeta cada 5 segundos. Las nuevas imágenes se procesarán automáticamente.</p>
+                    {lastScanTime && (
+                      <div className="text-xs text-green-700 mt-1 flex items-center gap-2">
+                        <Clock size={12} />
+                        <span>Último escaneo: {getTimeSinceLastScan()} (Escaneo #{scanCount})</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </AlertDescription>
