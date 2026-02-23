@@ -109,7 +109,7 @@ export default function FolderWatchPage() {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
       setInputDir(dirHandle);
-      addLog(`📁 Carpeta de entrada: ${dirHandle.name}`);
+      addLog({ name: `📁 Carpeta de entrada: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
@@ -122,7 +122,7 @@ export default function FolderWatchPage() {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
       setOutputDir(dirHandle);
-      addLog(`💾 Carpeta de salida: ${dirHandle.name}`);
+      addLog({ name: `💾 Carpeta de salida: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
