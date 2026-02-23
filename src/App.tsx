@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react';
 
 // Lazy loading de todas las páginas para code splitting
 const LoginPage = lazy(() => import('@/pages/Login'));
+const OnboardingPage = lazy(() => import('@/pages/Onboarding'));
 const RemovePage = lazy(() => import('@/pages/Remove'));
 const CompressPage = lazy(() => import('@/pages/Compress'));
 const GeneratePage = lazy(() => import('@/pages/Generate'));
@@ -71,6 +72,13 @@ function App() {
           <Routes>
             {/* Ruta Pública: Login */}
             <Route path="/login" element={<LoginPage />} />
+
+            {/* Ruta Privada: Onboarding (sin sidebar) */}
+            <Route path="/onboarding" element={
+              <PrivateRoute>
+                <OnboardingPage />
+              </PrivateRoute>
+            } />
 
             {/* Rutas Privadas: Dashboard */}
             <Route path="/" element={

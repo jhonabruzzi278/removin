@@ -1,8 +1,9 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { Bell, Coins, Settings, LogOut, CreditCard } from 'lucide-react';
+import { Bell, Coins, Settings, LogOut, CreditCard, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api';
 
 interface UsageStats {
   thisMonth: number;
@@ -16,6 +17,35 @@ export function DashboardLayout() {
   const [stats, setStats] = useState<UsageStats>({ thisMonth: 0, estimatedCost: 0 });
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [checkingToken, setCheckingToken] = useState(true);
+  const [hasToken, setHasToken] = useState(false);
+
+  // Verificar si el usuario tiene token configurado
+  useEffect(() => {
+    if (!user) {
+      setCheckingToken(false);
+      return;
+    }
+    
+    const checkUserToken = async () => {
+      try {
+        const response = await apiClient.hasToken();
+        setHasToken(response.hasToken);
+        
+        // Si no tiene token, redirigir al onboarding
+        if (!response.hasToken && location.pathname !== '/onboarding') {
+          navigate('/onboarding', { replace: true });
+        }
+      } catch {
+        // Error verificando token, permitir acceso por ahora
+        setHasToken(true);
+      } finally {
+        setCheckingToken(false);
+      }
+    };
+    
+    checkUserToken();
+  }, [user, navigate, location.pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -63,6 +93,23 @@ export function DashboardLayout() {
     if (!user?.email) return 'U';
     return user.email.substring(0, 2).toUpperCase();
   };
+
+  // Mostrar loader mientras se verifica el token
+  if (checkingToken) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
+          <p className="text-slate-600 text-sm">Verificando configuración...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si no tiene token y no está en onboarding, no renderizar nada (ya se redirigió)
+  if (!hasToken && location.pathname !== '/onboarding') {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background font-sans">
