@@ -76,6 +76,23 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================
+// GET /api/debug - Debug de configuración (TEMPORAL)
+// ============================================
+app.get('/api/debug', (req, res) => {
+  res.json({
+    env: {
+      hasProjectId: !!process.env.FIREBASE_PROJECT_ID,
+      hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
+      hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
+      privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
+      privateKeyStart: process.env.FIREBASE_PRIVATE_KEY?.substring(0, 30),
+      hasServiceAccountJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================
 // GET /api/user/token - Verificar si el usuario tiene token
 // ============================================
 app.get('/api/user/token', authenticateUser, async (req, res) => {
