@@ -4,6 +4,26 @@ import admin from 'firebase-admin';
 // En producción, usa las variables de entorno de Vercel
 let firebaseAdmin;
 
+/**
+ * Procesar la clave privada para manejar diferentes formatos
+ */
+function parsePrivateKey(key) {
+  if (!key) return null;
+  
+  // Si ya tiene saltos de línea reales, retornar tal cual
+  if (key.includes('-----BEGIN PRIVATE KEY-----\n')) {
+    return key;
+  }
+  
+  // Si tiene \n literales (como texto), reemplazarlos
+  if (key.includes('\\n')) {
+    return key.replace(/\\n/g, '\n');
+  }
+  
+  // Si no tiene ninguno de los dos, intentar agregar saltos de línea
+  return key;
+}
+
 function initializeFirebase() {
   if (firebaseAdmin) return firebaseAdmin;
   
@@ -14,21 +34,40 @@ function initializeFirebase() {
       return firebaseAdmin;
     }
 
-    // Configuración desde variables de entorno
+    // Intentar cargar desde JSON completo primero (más robusto)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount)
+        });
+        firebaseAdmin = admin;
+        console.log('✅ Firebase Admin inicializado desde JSON completo');
+        return firebaseAdmin;
+      } catch (jsonError) {
+        console.error('Error parseando FIREBASE_SERVICE_ACCOUNT_JSON:', jsonError.message);
+      }
+    }
+
+    // Configuración desde variables de entorno individuales
+    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+    const privateKey = parsePrivateKey(rawKey);
+    
     const serviceAccount = {
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // La private key viene con \n escapados, hay que convertirlos
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+      privateKey: privateKey
     };
 
     // Log para debugging
     console.log('🔧 Firebase Config Check:', {
       hasProjectId: !!serviceAccount.projectId,
       hasClientEmail: !!serviceAccount.clientEmail,
-      hasPrivateKey: !!serviceAccount.privateKey,
-      privateKeyLength: serviceAccount.privateKey?.length || 0,
-      privateKeyStart: serviceAccount.privateKey?.substring(0, 30)
+      hasPrivateKey: !!privateKey,
+      privateKeyLength: privateKey?.length || 0,
+      privateKeyStart: privateKey?.substring(0, 50),
+      rawKeyHasBackslashN: rawKey?.includes('\\n'),
+      rawKeyHasRealNewline: rawKey?.includes('\n')
     });
 
     // Verificar que tenemos las credenciales
