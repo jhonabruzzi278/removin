@@ -71,10 +71,11 @@ function initializeFirebase() {
       try {
         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
         admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount)
+          credential: admin.credential.cert(serviceAccount),
+          projectId: serviceAccount.project_id
         });
         firebaseAdmin = admin;
-        console.log('✅ Firebase Admin inicializado desde JSON completo');
+        console.log('✅ Firebase Admin inicializado desde JSON completo con projectId:', serviceAccount.project_id);
         return firebaseAdmin;
       } catch (jsonError) {
         console.error('Error parseando FIREBASE_SERVICE_ACCOUNT_JSON:', jsonError.message);
@@ -112,12 +113,14 @@ function initializeFirebase() {
       return null;
     }
 
+    // Inicializar con projectId explícito
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.credential.cert(serviceAccount),
+      projectId: serviceAccount.projectId
     });
 
     firebaseAdmin = admin;
-    console.log('✅ Firebase Admin inicializado correctamente');
+    console.log('✅ Firebase Admin inicializado correctamente con projectId:', serviceAccount.projectId);
     return firebaseAdmin;
   } catch (error) {
     console.error('❌ Error inicializando Firebase Admin:', error.message);
