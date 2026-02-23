@@ -43,6 +43,10 @@ export default function FolderWatchPage() {
   const isMonitoringRef = useRef(false);
   const whiteBackgroundRef = useRef(whiteBackground);
   const selectedModelRef = useRef(selectedModel);
+  
+  // Nuevos Refs para evitar Stale Closures en los intervalos
+  const scanFolderRef = useRef<(() => Promise<void>) | null>(null);
+  const processQueueRefFunc = useRef<(() => Promise<void>) | null>(null);
 
   const isSupported = 'showDirectoryPicker' in window;
   const hasObserverAPI = 'FileSystemObserver' in self;
@@ -78,6 +82,12 @@ export default function FolderWatchPage() {
   useEffect(() => {
     isMonitoringRef.current = isMonitoring;
   }, [isMonitoring]);
+
+  // Mantener las referencias siempre apuntando a la versión más reciente
+  useEffect(() => {
+    scanFolderRef.current = scanFolder;
+    processQueueRefFunc.current = processQueue;
+  });
 
   // Actualizar UI cada segundo para mostrar tiempo desde último escaneo
   useEffect(() => {
@@ -527,12 +537,17 @@ export default function FolderWatchPage() {
         const Observer = (self as any).FileSystemObserver;
         const observer = new Observer(async (records: any[]) => {
           console.log(`[Observer] Callback ejecutado con ${records.length} registro(s)`);
+          
+          let hasNewFiles = false;
+
           for (const record of records) {
             console.log(`[Observer] Evento tipo: ${record.type}`);
+            
             // RF-1: Solo reaccionar a archivos nuevos (appeared)
             if (record.type === 'appeared' || record.type === 'modified') {
               try {
-                const handle = record.root || record.changedHandle;
+                // CORRECCIÓN: Usar changedHandle, no root
+                const handle = record.changedHandle;
                 if (handle && handle.kind === 'file') {
                   const file = await handle.getFile();
                   console.log(`[Observer] Archivo detectado: ${file.name}`);
@@ -542,13 +557,21 @@ export default function FolderWatchPage() {
                     processedNamesRef.current.add(file.name);
                     setTrackedCount(processedNamesRef.current.size);
                     processingQueueRef.current.push({ file, name: file.name });
-                    processQueue();
+                    hasNewFiles = true;
                   }
                 }
               } catch (err) {
                 console.error('Error procesando evento del observer:', err);
               }
             }
+            // Si el sistema pierde eventos, el SO arroja "unknown" y debemos hacer escaneo manual
+            else if (record.type === 'unknown') {
+              if (scanFolderRef.current) scanFolderRef.current();
+            }
+          }
+
+          if (hasNewFiles && processQueueRefFunc.current) {
+            processQueueRefFunc.current();
           }
         });
         
@@ -557,41 +580,24 @@ export default function FolderWatchPage() {
         setUseObserver(true);
         info(`⚡ Observer activo + Polling de respaldo cada 10s`);
         
-        // Hacer un escaneo inicial incluso con Observer
-        // (por si el usuario copió archivos durante la inicialización)
-        setTimeout(() => {
-          console.log('[Observer] Ejecutando escaneo inicial de verificación');
-          scanFolder();
-        }, 100);
-        
-        // IMPORTANTE: Agregar polling de respaldo cada 10s
-        // porque Observer puede no detectar todos los eventos
+        // Polling de respaldo configurado cada 10s usando la referencia actualizada
         intervalRef.current = setInterval(() => {
           console.log('[Observer+Polling] Escaneo de respaldo automático');
-          scanFolder();
+          if (scanFolderRef.current) scanFolderRef.current();
         }, 10000);
-        console.log('[Observer+Polling] Polling de respaldo configurado cada 10s');
+        
       } catch (err) {
         console.error('Error al inicializar FileSystemObserver:', err);
         // Caer al fallback
         setUseObserver(false);
         info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
         
-        // Primer escaneo inmediato
-        scanFolder();
+        if (scanFolderRef.current) scanFolderRef.current();
         
-        // Configurar intervalo de polling
         intervalRef.current = setInterval(() => {
           console.log('[Polling] Ejecutando escaneo automático desde setInterval');
-          scanFolder();
+          if (scanFolderRef.current) scanFolderRef.current();
         }, 3000);
-        
-        console.log('[Polling] Intervalo configurado, ID:', intervalRef.current);
-        
-        // Verificar después de 1 segundo que el intervalo sigue activo
-        setTimeout(() => {
-          console.log('[Polling] Verificación: intervalRef.current =', intervalRef.current);
-        }, 1000);
       }
     } else {
       // RF-2: Fallback con polling optimizado
@@ -599,22 +605,12 @@ export default function FolderWatchPage() {
       setUseObserver(false);
       info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
       
-      // Primer escaneo inmediato
-      console.log('[Polling] Iniciando primer escaneo inmediato');
-      scanFolder();
+      if (scanFolderRef.current) scanFolderRef.current();
       
-      // Configurar intervalo de polling
       intervalRef.current = setInterval(() => {
         console.log('[Polling] Ejecutando escaneo automático desde setInterval');
-        scanFolder();
+        if (scanFolderRef.current) scanFolderRef.current();
       }, 3000);
-      
-      console.log('[Polling] Intervalo configurado, ID:', intervalRef.current);
-      
-      // Verificar después de 1 segundo que el intervalo sigue activo
-      setTimeout(() => {
-        console.log('[Polling] Verificación: intervalRef.current =', intervalRef.current);
-      }, 1000);
     }
   };
 
