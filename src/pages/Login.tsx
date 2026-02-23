@@ -19,25 +19,16 @@ export default function LoginPage() {
   }, [user, navigate]);
 
   const handleLogin = async () => {
-    console.log('🔐 Iniciando login...');
-    console.log('isConfigured:', isConfigured);
-    console.log('auth:', !!auth);
-    console.log('googleProvider:', !!googleProvider);
-    
     if (!isConfigured || !auth || !googleProvider) {
-      console.error('❌ Firebase no configurado');
       showError('Firebase no está configurado.');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('🚀 Abriendo popup de Google...');
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log('✅ Login exitoso:', result.user.email);
+      await signInWithPopup(auth, googleProvider);
     } catch (err) {
       const error = err as { code?: string; message?: string };
-      console.error('❌ Error login:', error.code, error.message);
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         showError(`Error: ${error.message || 'Error desconocido'}`);
       }
