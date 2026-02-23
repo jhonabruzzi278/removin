@@ -36,6 +36,7 @@ export default function FolderWatchPage() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([]);
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 });
+  const [trackedCount, setTrackedCount] = useState(0);
   const [whiteBackground, setWhiteBackground] = useState(false);
   const [hasReplicateToken, setHasReplicateToken] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
@@ -109,8 +110,11 @@ export default function FolderWatchPage() {
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
       setInputDir(dirHandle);
+      // No limpiar processedNamesRef cuando se cambia de carpeta
+      // para permitir iniciar monitoreo sin procesar archivos viejos
       addLog({ name: `📁 Carpeta de entrada: ${dirHandle.name}`, status: 'completed' });
       success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
+      console.log(`[FolderWatch] Carpeta seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
         error('❌ Error al seleccionar carpeta de entrada');
@@ -335,22 +339,33 @@ export default function FolderWatchPage() {
     if (!inputDir || !outputDir) return;
 
     try {
+      let filesFound = 0;
+      let newFilesFound = 0;
+      
       for await (const entry of inputDir.values()) {
         if (entry.kind === 'file') {
           const file = await entry.getFile();
           
           if (file.type.startsWith('image/')) {
+            filesFound++;
             if (!processedNamesRef.current.has(file.name)) {
+              newFilesFound++;
               processedNamesRef.current.add(file.name);
+              setTrackedCount(processedNamesRef.current.size);
               // Agregar a la cola en lugar de procesar inmediatamente
               processingQueueRef.current.push({ file, name: file.name });
+              console.log(`[FolderWatch] Nueva imagen detectada: ${file.name} (${Math.round(file.size / 1024)}KB)`);
             }
           }
         }
       }
       
+      console.log(`[FolderWatch] Escaneo completado: ${filesFound} imágenes totales, ${newFilesFound} nuevas detectadas`);
+      
       // Procesar la cola con delay
-      processQueue();
+      if (newFilesFound > 0) {
+        processQueue();
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
       
@@ -411,6 +426,10 @@ export default function FolderWatchPage() {
       return;
     }
 
+    console.log('[FolderWatch] Iniciando monitoreo...');
+    console.log(`[FolderWatch] Carpeta monitoreada: ${inputDir.name}`);
+    console.log(`[FolderWatch] Archivos ya procesados: ${processedNamesRef.current.size}`);
+    
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     addLog({ name: '🚀 Monitoreo iniciado', status: 'completed' });
@@ -424,6 +443,9 @@ export default function FolderWatchPage() {
   };
 
   const stopMonitoring = () => {
+    console.log('[FolderWatch] Deteniendo monitoreo...');
+    console.log(`[FolderWatch] Total archivos procesados: ${processedNamesRef.current.size}`);
+    
     setIsMonitoring(false);
     isMonitoringRef.current = false;
     addLog({ name: '⏸️ Monitoreo detenido', status: 'completed' });
@@ -449,7 +471,19 @@ export default function FolderWatchPage() {
     setProcessedFiles([]);
     setStats({ total: 0, success: 0, errors: 0 });
     processedNamesRef.current.clear();
+    setTrackedCount(0);
+    console.log('[FolderWatch] Registro limpiado - registro de archivos procesados reseteado');
     success('✅ Registro limpiado');
+  };
+
+  const forceScan = () => {
+    if (!isMonitoring) {
+      error('❌ Debes iniciar el monitoreo primero');
+      return;
+    }
+    console.log('[FolderWatch] Escaneo manual forzado...');
+    info('🔄 Escaneando carpeta...');
+    scanFolder();
   };
 
   // Cleanup al desmontar: liberar Object URLs y detener monitoreo
@@ -695,20 +729,30 @@ export default function FolderWatchPage() {
             Iniciar Monitoreo
           </Button>
         ) : (
-          <Button
-            onClick={stopMonitoring}
-            variant="destructive"
-            className="flex-1 h-12 font-medium"
-          >
-            <Pause className="w-4 h-4 mr-2" />
-            Detener
-          </Button>
+          <>
+            <Button
+              onClick={stopMonitoring}
+              variant="destructive"
+              className="flex-1 h-12 font-medium"
+            >
+              <Pause className="w-4 h-4 mr-2" />
+              Detener
+            </Button>
+            <Button
+              onClick={forceScan}
+              variant="outline"
+              className="h-12 px-4"
+              title="Forzar escaneo inmediato"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </>
         )}
         <Button
           onClick={clearLogs}
           variant="outline"
           className="h-12 px-4"
-          title="Limpiar registro"
+          title="Limpiar registro y resetear archivos procesados"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
@@ -726,7 +770,7 @@ export default function FolderWatchPage() {
       ) : null}
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card className="p-4">
           <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
           <p className="text-sm text-slate-600">Total</p>
@@ -740,6 +784,11 @@ export default function FolderWatchPage() {
         <Card className="p-4">
           <p className="text-2xl font-bold text-red-600">{stats.errors}</p>
           <p className="text-sm text-slate-600">Errores</p>
+        </Card>
+
+        <Card className="p-4">
+          <p className="text-2xl font-bold text-blue-600">{trackedCount}</p>
+          <p className="text-sm text-slate-600">Rastreados</p>
         </Card>
       </div>
 
