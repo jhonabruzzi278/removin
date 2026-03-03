@@ -47,7 +47,7 @@ export default function FolderWatchPage() {
   const isSupported = 'showDirectoryPicker' in window;
   const hasObserverAPI = 'FileSystemObserver' in self;
   
-  // Filtrar a 3 modelos principales: econÃ³mico, estÃ¡ndar y premium
+  // Filtrar a 3 modelos principales: económico, estándar y premium
   const bgModels = availableModels.filter(m => 
     m.category === 'background-removal' && 
     ['cjwbw-rembg', 'lucataco-remove-bg', 'smoretalk-rembg-enhance'].includes(m.id)
@@ -79,13 +79,13 @@ export default function FolderWatchPage() {
     isMonitoringRef.current = isMonitoring;
   }, [isMonitoring]);
 
-  // Mantener las referencias siempre apuntando a la versiÃ³n mÃ¡s reciente
+  // Mantener las referencias siempre apuntando a la versión más reciente
   useEffect(() => {
     scanFolderRef.current = scanFolder;
     processQueueRefFunc.current = processQueue;
   });
 
-  // Actualizar UI cada segundo para mostrar tiempo desde Ãºltimo escaneo
+  // Actualizar UI cada segundo para mostrar tiempo desde último escaneo
   useEffect(() => {
     if (!isMonitoring || !lastScanTime) return;
     
@@ -134,11 +134,11 @@ export default function FolderWatchPage() {
               const granted = await (inputHandle as any).requestPermission({ mode: 'read' });
               if (granted === 'granted') {
                 setInputDir(inputHandle);
-                info('ðŸ“ Carpeta de entrada restaurada');
+                info('📁 Carpeta de entrada restaurada');
               }
             } else {
               setInputDir(inputHandle);
-              info('ðŸ“ Carpeta de entrada restaurada');
+              info('📁 Carpeta de entrada restaurada');
             }
           }
         }
@@ -150,11 +150,11 @@ export default function FolderWatchPage() {
               const granted = await (outputHandle as any).requestPermission({ mode: 'readwrite' });
               if (granted === 'granted') {
                 setOutputDir(outputHandle);
-                info('ðŸ’¾ Carpeta de salida restaurada');
+                info('💾 Carpeta de salida restaurada');
               }
             } else {
               setOutputDir(outputHandle);
-              info('ðŸ’¾ Carpeta de salida restaurada');
+              info('💾 Carpeta de salida restaurada');
             }
           }
         }
@@ -179,10 +179,10 @@ export default function FolderWatchPage() {
       setInputDir(dirHandle);
       // RF-3: Guardar en IndexedDB para persistencia
       await set('folderwatch-input', dirHandle);
-      success(`âœ… Carpeta de entrada seleccionada: ${dirHandle.name}`);
+      success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
-        error('âŒ Error al seleccionar carpeta de entrada');
+        error('❌ Error al seleccionar carpeta de entrada');
       }
     }
   };
@@ -200,10 +200,10 @@ export default function FolderWatchPage() {
       setOutputDir(dirHandle);
       // RF-3: Guardar en IndexedDB para persistencia
       await set('folderwatch-output', dirHandle);
-      success(`âœ… Carpeta de salida seleccionada: ${dirHandle.name}`);
+      success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('aborted')) {
-        error('âŒ Error al seleccionar carpeta de salida');
+        error('❌ Error al seleccionar carpeta de salida');
       }
     }
   };
@@ -212,12 +212,12 @@ export default function FolderWatchPage() {
     let prevFile = await handle.getFile();
     let retries = 0;
     
-    // Esperar hasta que el archivo termine de copiarse al disco (mÃ¡ximo 10 segundos)
+    // Esperar hasta que el archivo termine de copiarse al disco (máximo 10 segundos)
     while (retries < 20) {
       await new Promise(resolve => setTimeout(resolve, 500));
       const currFile = await handle.getFile();
       
-      // Si el tamaÃ±o es mayor a 0, y no ha mutado desde la Ãºltima comprobaciÃ³n, estÃ¡ listo.
+      // Si el tamaño es mayor a 0, y no ha mutado desde la última comprobación, está listo.
       if (currFile.size > 0 && 
           currFile.size === prevFile.size && 
           currFile.lastModified === prevFile.lastModified) {
@@ -237,13 +237,13 @@ export default function FolderWatchPage() {
     const currentWhiteBackground = whiteBackgroundRef.current;
     
     try {
-      // ValidaciÃ³n de archivo
+      // Validación de archivo
       if (!file.type.startsWith('image/')) {
-        throw new Error('El archivo no es una imagen vÃ¡lida');
+        throw new Error('El archivo no es una imagen válida');
       }
       
       if (file.size > 10 * 1024 * 1024) {
-        throw new Error('El archivo excede el tamaÃ±o mÃ¡ximo de 10MB');
+        throw new Error('El archivo excede el tamaño máximo de 10MB');
       }
 
       // Sanitizar nombre de archivo para evitar path traversal
@@ -266,7 +266,7 @@ export default function FolderWatchPage() {
         throw new Error(data.error || 'Error en el procesamiento de la imagen');
       }
 
-      // La imagen procesada ahora estÃ¡ en Firebase Storage, descarga directa
+      // La imagen procesada ahora está en Firebase Storage, descarga directa
       
       const response = await fetch(data.outputUrl, {
         method: 'GET',
@@ -281,12 +281,12 @@ export default function FolderWatchPage() {
       let resultBlob = await response.blob();
       
       if (!resultBlob || resultBlob.size === 0) {
-        throw new Error('Imagen vacÃ­a recibida');
+        throw new Error('Imagen vacía recibida');
       }
 
       if (!outputDir) throw new Error('No output directory');
 
-      // Aplicar fondo blanco si estÃ¡ activado (usar ref para valor actual)
+      // Aplicar fondo blanco si está activado (usar ref para valor actual)
       if (currentWhiteBackground) {
         const tempUrl = URL.createObjectURL(resultBlob);
         
@@ -336,7 +336,7 @@ export default function FolderWatchPage() {
         }
       }
 
-      // Mantener el mismo nombre, solo cambiar extensiÃ³n segÃºn formato de salida
+      // Mantener el mismo nombre, solo cambiar extensión según formato de salida
       const outputName = fileName.replace(
         /\.(jpg|jpeg|png|webp)$/i,
         currentWhiteBackground ? '.jpg' : '.png'
@@ -347,7 +347,7 @@ export default function FolderWatchPage() {
       await writable.close();
 
       const processingTime = Math.round((Date.now() - startTime) / 1000);
-      success(`âœ… ${fileName} procesada (${processingTime}s)`);
+      success(`✅ ${fileName} procesada (${processingTime}s)`);
       
       setStats(prev => ({
         total: prev.total + 1,
@@ -359,30 +359,30 @@ export default function FolderWatchPage() {
       try {
         await deleteFile(filePath);
       } catch {
-        // Error no crÃ­tico al limpiar archivo temporal
+        // Error no crítico al limpiar archivo temporal
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
       
-      // Mensaje de error amigable segÃºn el tipo
+      // Mensaje de error amigable según el tipo
       let userFriendlyError = errorMsg;
       if (errorMsg.includes('REPLICATE_API_TOKEN')) {
         userFriendlyError = 'Token de Replicate no configurado';
       } else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
-        userFriendlyError = 'LÃ­mite de peticiones alcanzado. Esperando 5 segundos...';
+        userFriendlyError = 'Límite de peticiones alcanzado. Esperando 5 segundos...';
         // Esperar 5 segundos antes de continuar
         await new Promise(resolve => setTimeout(resolve, 5000));
       } else if (errorMsg.includes('storage') || errorMsg.includes('upload')) {
         userFriendlyError = 'Error al subir imagen';
       } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('HTTP')) {
-        userFriendlyError = `Error de conexiÃ³n: ${errorMsg}`;
+        userFriendlyError = `Error de conexión: ${errorMsg}`;
       } else if (errorMsg.includes('output directory')) {
         userFriendlyError = 'Error al guardar archivo';
       } else if (errorMsg.includes('ERR_HTTP2') || errorMsg.includes('Failed to fetch')) {
-        userFriendlyError = 'Error de red al descargar imagen. Verifica tu conexiÃ³n y las URLs de Firebase.';
+        userFriendlyError = 'Error de red al descargar imagen. Verifica tu conexión y las URLs de Firebase.';
       }
 
-      error(`âŒ ${fileName}: ${userFriendlyError}`);
+      error(`❌ ${fileName}: ${userFriendlyError}`);
       
       setStats(prev => ({
         total: prev.total + 1,
@@ -411,8 +411,8 @@ export default function FolderWatchPage() {
       }
       
       snapshotRef.current = snapshot;
-      console.log(`[Snapshot] Snapshot completado: ${snapshot.size} archivos serÃ¡n ignorados`);
-      info(`ðŸ“¸ Snapshot creado: ${snapshot.size} archivos existentes serÃ¡n ignorados`);
+      console.log(`[Snapshot] Snapshot completado: ${snapshot.size} archivos serán ignorados`);
+      info(`📸 Snapshot creado: ${snapshot.size} archivos existentes serán ignorados`);
       return snapshot.size;
     } catch (err) {
       console.error('Error al crear snapshot:', err);
@@ -455,32 +455,32 @@ export default function FolderWatchPage() {
             
             console.log(`[Escaneo] Archivo: ${file.name} - inSnapshot: ${inSnapshot}, inProcessed: ${inProcessed}`);
             
-            // RF-2: Solo procesar si NO estÃ¡ en el snapshot inicial
+            // RF-2: Solo procesar si NO está en el snapshot inicial
             if (!inSnapshot && !inProcessed) {
               newFilesFound++;
               processedNamesRef.current.add(file.name);
               setTrackedCount(processedNamesRef.current.size);
               processingQueueRef.current.push({ handle: entry, name: file.name });
-              console.log(`[Escaneo] âœ… Archivo NUEVO detectado: ${file.name}`);
+              console.log(`[Escaneo] ✅ Archivo NUEVO detectado: ${file.name}`);
             }
           }
         }
       }
       
-      console.log(`[Escaneo #${scanNumber}] Completado - Total imÃ¡genes: ${filesFound}, Nuevas: ${newFilesFound}`);
+      console.log(`[Escaneo #${scanNumber}] Completado - Total imágenes: ${filesFound}, Nuevas: ${newFilesFound}`);
       
       if (newFilesFound > 0) {
-        info(`ðŸ” Detectados ${newFilesFound} archivo(s) nuevo(s)`);
+        info(`🔍 Detectados ${newFilesFound} archivo(s) nuevo(s)`);
         processQueue();
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
       
       if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
-        error('âš ï¸ Error: Sin permisos para acceder a la carpeta');
+        error('⚠️ Error: Sin permisos para acceder a la carpeta');
         stopMonitoring();
       } else {
-        error(`âš ï¸ Error al escanear carpeta: ${errorMsg}`);
+        error(`⚠️ Error al escanear carpeta: ${errorMsg}`);
       }
     }
   };
@@ -512,7 +512,7 @@ export default function FolderWatchPage() {
           console.error("Error al estabilizar archivo:", err);
         }
 
-        // Delay de seguridad entre imÃ¡genes para no saturar Replicate
+        // Delay de seguridad entre imágenes para no saturar Replicate
         if (processingQueueRef.current.length > 0 && isMonitoringRef.current) {
           await new Promise(resolve => setTimeout(resolve, 10000));
         }
@@ -526,22 +526,22 @@ export default function FolderWatchPage() {
     console.log('[Start] Iniciando monitoreo...');
     
     if (!inputDir || !outputDir) {
-      error('âŒ Selecciona las carpetas primero');
+      error('❌ Selecciona las carpetas primero');
       return;
     }
 
     if (inputDir.name === outputDir.name) {
-      error('âŒ Las carpetas de entrada y salida deben ser diferentes');
+      error('❌ Las carpetas de entrada y salida deben ser diferentes');
       return;
     }
 
     if (!hasReplicateToken) {
-      error('âŒ Debes configurar tu token de Replicate en Ajustes primero');
+      error('❌ Debes configurar tu token de Replicate en Ajustes primero');
       return;
     }
 
     if (!selectedModel) {
-      error('âŒ Selecciona un modelo de IA primero');
+      error('❌ Selecciona un modelo de IA primero');
       return;
     }
     
@@ -549,14 +549,14 @@ export default function FolderWatchPage() {
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     setScanCount(0);
-    success('ðŸš€ Monitoreo iniciado');
+    success('🚀 Monitoreo iniciado');
     
     // RF-2: Crear snapshot de archivos existentes
     console.log('[Start] Creando snapshot...');
     const existingCount = await createSnapshot();
-    info(`ðŸ“¸ Snapshot creado: ${existingCount} archivos existentes ignorados`);
+    info(`📸 Snapshot creado: ${existingCount} archivos existentes ignorados`);
     
-    // RF-1: Intentar usar FileSystemObserver si estÃ¡ disponible
+    // RF-1: Intentar usar FileSystemObserver si está disponible
     console.log('[Start] Verificando FileSystemObserver API...');
     console.log('[Start] hasObserverAPI:', hasObserverAPI);
     
@@ -575,14 +575,14 @@ export default function FolderWatchPage() {
             // RF-1: Solo reaccionar a archivos nuevos (appeared)
             if (record.type === 'appeared' || record.type === 'modified') {
               try {
-                // CORRECCIÃ“N: Usar changedHandle, no root
+                // CORRECCIÓN: Usar changedHandle, no root
                 const handle = record.changedHandle;
                 if (handle && handle.kind === 'file') {
                   const file = await handle.getFile();
                   console.log(`[Observer] Archivo detectado: ${file.name}`);
                   
                   if (file.type.startsWith('image/') && !processedNamesRef.current.has(file.name)) {
-                    console.log(`[Observer] âœ… Archivo NUEVO vÃ­a Observer: ${file.name}`);
+                    console.log(`[Observer] ✅ Archivo NUEVO vía Observer: ${file.name}`);
                     processedNamesRef.current.add(file.name);
                     setTrackedCount(processedNamesRef.current.size);
                     processingQueueRef.current.push({ handle, name: file.name });
@@ -607,11 +607,11 @@ export default function FolderWatchPage() {
         await observer.observe(inputDir, { recursive: false });
         observerRef.current = observer;
         setUseObserver(true);
-        info(`âš¡ Observer activo + Polling de respaldo cada 10s`);
+        info(`⚡ Observer activo + Polling de respaldo cada 10s`);
         
         // Polling de respaldo configurado cada 10s usando la referencia actualizada
         intervalRef.current = setInterval(() => {
-          console.log('[Observer+Polling] Escaneo de respaldo automÃ¡tico');
+          console.log('[Observer+Polling] Escaneo de respaldo automático');
           if (scanFolderRef.current) scanFolderRef.current();
         }, 10000);
         
@@ -619,12 +619,12 @@ export default function FolderWatchPage() {
         console.error('Error al inicializar FileSystemObserver:', err);
         // Caer al fallback
         setUseObserver(false);
-        info(`ðŸš€ Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
+        info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
         
         if (scanFolderRef.current) scanFolderRef.current();
         
         intervalRef.current = setInterval(() => {
-          console.log('[Polling] Ejecutando escaneo automÃ¡tico desde setInterval');
+          console.log('[Polling] Ejecutando escaneo automático desde setInterval');
           if (scanFolderRef.current) scanFolderRef.current();
         }, 3000);
       }
@@ -632,12 +632,12 @@ export default function FolderWatchPage() {
       // RF-2: Fallback con polling optimizado
       console.log('[Start] FileSystemObserver NO disponible, usando polling');
       setUseObserver(false);
-      info(`ðŸš€ Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
+      info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
       
       if (scanFolderRef.current) scanFolderRef.current();
       
       intervalRef.current = setInterval(() => {
-        console.log('[Polling] Ejecutando escaneo automÃ¡tico desde setInterval');
+        console.log('[Polling] Ejecutando escaneo automático desde setInterval');
         if (scanFolderRef.current) scanFolderRef.current();
       }, 3000);
     }
@@ -647,9 +647,9 @@ export default function FolderWatchPage() {
     console.log('[Stop] Deteniendo monitoreo...');
     setIsMonitoring(false);
     isMonitoringRef.current = false;
-    info('â¸ï¸ Monitoreo detenido');
+    info('⏸️ Monitoreo detenido');
     
-    // RF-1: Desconectar FileSystemObserver si estÃ¡ activo
+    // RF-1: Desconectar FileSystemObserver si está activo
     if (observerRef.current) {
       try {
         console.log('[Stop] Desconectando Observer');
@@ -676,16 +676,16 @@ export default function FolderWatchPage() {
     snapshotRef.current.clear();
     processingQueueRef.current = [];
     setTrackedCount(0);
-    success('âœ… EstadÃ­sticas reiniciadas');
+    success('✅ Estadísticas reiniciadas');
   };
 
   const forceScan = () => {
     if (!isMonitoring) {
-      error('âŒ Debes iniciar el monitoreo primero');
+      error('❌ Debes iniciar el monitoreo primero');
       return;
     }
     console.log('[ForceScan] Escaneo manual forzado por usuario');
-    info('ðŸ”„ Escaneando carpeta...');
+    info('🔄 Escaneando carpeta...');
     scanFolder();
   };
 
@@ -718,7 +718,7 @@ export default function FolderWatchPage() {
           </div>
           <h2 className="text-xl font-semibold text-slate-800 mb-2">Navegador no compatible</h2>
           <p className="text-slate-500 text-sm leading-relaxed">
-            Esta funciÃ³n requiere Chrome, Edge o Brave versiÃ³n 86 o superior con soporte para la API del sistema de archivos.
+            Esta función requiere Chrome, Edge o Brave versión 86 o superior con soporte para la API del sistema de archivos.
           </p>
         </div>
       </div>
@@ -728,10 +728,10 @@ export default function FolderWatchPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto px-4 sm:px-6 pb-10">
 
-      {/* â”€â”€ Header â”€â”€ */}
+      {/* ── Header ── */}
       <div className="pt-2">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          {/* TÃ­tulo */}
+          {/* Título */}
           <div className="flex items-start gap-3">
             <div className="w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-md shadow-indigo-200">
               <Activity className="w-5 h-5 text-white" />
@@ -739,14 +739,14 @@ export default function FolderWatchPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight text-slate-950">Auto Monitor</h1>
-                <Tooltip content="Monitorea una carpeta y procesa automÃ¡ticamente las imÃ¡genes nuevas que detecte" position="right">
+                <Tooltip content="Monitorea una carpeta y procesa automáticamente las imágenes nuevas que detecte" position="right">
                   <button className="text-slate-400 hover:text-slate-600 transition-colors">
                     <HelpCircle size={16} />
                   </button>
                 </Tooltip>
               </div>
               <p className="text-sm font-medium text-slate-500 mt-0.5">
-                DetecciÃ³n automÃ¡tica Â· Procesamiento en cola Â· Sin intervenciÃ³n manual
+                Detección automática · Procesamiento en cola · Sin intervención manual
               </p>
             </div>
           </div>
@@ -755,7 +755,7 @@ export default function FolderWatchPage() {
           <div className="flex items-center gap-2.5 bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 self-start shadow-sm">
             <div className="w-4 h-4 rounded-full border-2 border-slate-500 bg-white flex-shrink-0" />
             <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Fondo Blanco</span>
-            <Tooltip content="Guarda las imÃ¡genes con fondo blanco (JPG) en lugar de transparente (PNG)" position="left">
+            <Tooltip content="Guarda las imágenes con fondo blanco (JPG) en lugar de transparente (PNG)" position="left">
               <button className="text-slate-400 hover:text-slate-600 transition-colors">
                 <HelpCircle size={14} />
               </button>
@@ -778,14 +778,14 @@ export default function FolderWatchPage() {
         </div>
       </div>
 
-      {/* â”€â”€ Alertas de estado â”€â”€ */}
+      {/* ── Alertas de estado ── */}
       <div className="space-y-3">
         {/* Restaurando */}
         {isRestoring && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-100 border-2 border-indigo-300">
             <Loader2 className="h-4 w-4 text-indigo-700 animate-spin flex-shrink-0" />
             <p className="text-sm font-medium text-indigo-900">
-              <span className="font-bold">Restaurando carpetas</span> guardadas anteriormenteâ€¦
+              <span className="font-bold">Restaurando carpetas</span> guardadas anteriormente…
             </p>
           </div>
         )}
@@ -813,12 +813,12 @@ export default function FolderWatchPage() {
                 </div>
                 {!useObserver && lastScanTime && (
                   <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                    Ãšltimo escaneo: {getTimeSinceLastScan()} Â· #{scanCount}
+                    Último escaneo: {getTimeSinceLastScan()} · #{scanCount}
                   </p>
                 )}
                 {useObserver && (
                   <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                    DetecciÃ³n instantÃ¡nea con escaneo de respaldo cada 10 segundos
+                    Detección instantánea con escaneo de respaldo cada 10 segundos
                   </p>
                 )}
               </div>
@@ -831,19 +831,19 @@ export default function FolderWatchPage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-amber-100 border-2 border-amber-400">
             <AlertCircle className="h-4 w-4 text-amber-700 flex-shrink-0" />
             <p className="text-sm font-medium text-amber-900 flex-1">
-              <span className="font-bold">Token requerido:</span> Configura tu token de Replicate para usar esta funciÃ³n.
+              <span className="font-bold">Token requerido:</span> Configura tu token de Replicate para usar esta función.
             </p>
             <button
               onClick={() => window.location.href = '/settings'}
               className="text-xs font-bold text-amber-900 underline underline-offset-2 hover:text-amber-700 whitespace-nowrap self-start sm:self-auto"
             >
-              Ir a Ajustes â†’
+              Ir a Ajustes →
             </button>
           </div>
         )}
       </div>
 
-      {/* â”€â”€ Carpetas â”€â”€ */}
+      {/* ── Carpetas ── */}
       <div className="grid sm:grid-cols-2 gap-4">
         {/* Entrada */}
         <div className={cn(
@@ -879,7 +879,7 @@ export default function FolderWatchPage() {
               </div>
             </div>
             <p className={cn("text-xs font-medium", inputDir ? "text-emerald-700" : "text-slate-500")}>
-              {inputDir ? "Carpeta de origen configurada âœ“" : "ImÃ¡genes nuevas aquÃ­ serÃ¡n procesadas automÃ¡ticamente"}
+              {inputDir ? "Carpeta de origen configurada ✓" : "Imágenes nuevas aquí serán procesadas automáticamente"}
             </p>
           </button>
         </div>
@@ -918,18 +918,18 @@ export default function FolderWatchPage() {
               </div>
             </div>
             <p className={cn("text-xs font-medium", outputDir ? "text-indigo-700" : "text-slate-500")}>
-              {outputDir ? "Carpeta de destino configurada âœ“" : "Las imÃ¡genes procesadas se guardarÃ¡n aquÃ­"}
+              {outputDir ? "Carpeta de destino configurada ✓" : "Las imágenes procesadas se guardarán aquí"}
             </p>
           </button>
         </div>
       </div>
 
-      {/* â”€â”€ Selector de Modelo â”€â”€ */}
+      {/* ── Selector de Modelo ── */}
       <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="px-5 py-4 border-b-2 border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-slate-900">Modelo de IA</h2>
-            <Tooltip content="Selecciona el modelo que se usarÃ¡ para eliminar el fondo de todas las imÃ¡genes" position="right">
+            <Tooltip content="Selecciona el modelo que se usará para eliminar el fondo de todas las imágenes" position="right">
               <button className="text-slate-400 hover:text-slate-600 transition-colors">
                 <HelpCircle size={14} />
               </button>
@@ -941,7 +941,7 @@ export default function FolderWatchPage() {
         <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
           {bgModels.map((model) => {
             const quality = getQualityLevel(model.quality);
-            const tier = quality >= 4 ? "Premium" : quality >= 3 ? "EstÃ¡ndar" : "EconÃ³mico";
+            const tier = quality >= 4 ? "Premium" : quality >= 3 ? "Estándar" : "Económico";
             const tierColor = quality >= 4
               ? "bg-violet-600 text-white"
               : quality >= 3
@@ -993,7 +993,7 @@ export default function FolderWatchPage() {
         </div>
       </div>
 
-      {/* â”€â”€ Aviso de configuraciÃ³n pendiente â”€â”€ */}
+      {/* ── Aviso de configuración pendiente ── */}
       {(!inputDir || !outputDir || !selectedModel) && !isMonitoring && (
         <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-100 border-2 border-slate-300">
           <Info className="h-4 w-4 text-slate-600 flex-shrink-0" />
@@ -1005,7 +1005,7 @@ export default function FolderWatchPage() {
         </div>
       )}
 
-      {/* â”€â”€ Controles â”€â”€ */}
+      {/* ── Controles ── */}
       <div className="flex flex-col sm:flex-row gap-3">
         {!isMonitoring ? (
           <button
@@ -1035,7 +1035,7 @@ export default function FolderWatchPage() {
             </Tooltip>
           </>
         )}
-        <Tooltip content="Reiniciar estadÃ­sticas y lista de archivos procesados" position="top">
+        <Tooltip content="Reiniciar estadísticas y lista de archivos procesados" position="top">
           <button
             onClick={resetStats}
             className="inline-flex items-center justify-center h-12 w-12 rounded-xl border-2 border-slate-300 bg-white hover:border-rose-500 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
@@ -1045,7 +1045,7 @@ export default function FolderWatchPage() {
         </Tooltip>
       </div>
 
-      {/* â”€â”€ EstadÃ­sticas â”€â”€ */}
+      {/* ── Estadísticas ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Total", value: stats.total, color: "text-slate-950", bg: "bg-slate-100", border: "border-slate-400", icon: <Activity className="w-4 h-4 text-slate-600" /> },
@@ -1063,7 +1063,7 @@ export default function FolderWatchPage() {
         ))}
       </div>
 
-      {/* â”€â”€ Toasts â”€â”€ */}
+      {/* ── Toasts ── */}
       <div className="fixed bottom-6 right-4 sm:right-6 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className="pointer-events-auto">
