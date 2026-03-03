@@ -24,13 +24,15 @@ export default function SettingsPage() {
   const [isValidKey, setIsValidKey] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
+  const MASKED_VALUE = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+
   useEffect(() => {
     const loadSettings = async () => {
       if (!user) return;
       try {
         const data = await apiClient.hasToken();
         if (data.hasToken) {
-          setReplicateKey('\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022');
+          setReplicateKey(MASKED_VALUE);
           setIsValidKey(true);
         }
       } catch {
@@ -52,8 +54,8 @@ export default function SettingsPage() {
 
     const sanitizedToken = replicateKey.trim();
     
-    if (!sanitizedToken) {
-      warning('⚠️ Ingresa tu API token');
+    if (!sanitizedToken || sanitizedToken === MASKED_VALUE) {
+      warning('⚠️ Ingresa tu nuevo API token');
       return;
     }
 
@@ -68,6 +70,7 @@ export default function SettingsPage() {
     try {
       await apiClient.saveToken(sanitizedToken);
       setIsValidKey(true);
+      setReplicateKey(MASKED_VALUE);
       setSuccessMsg('¡Guardado! Ya puedes usar todas las funciones.');
       success('✅ Token guardado correctamente');
       setTimeout(() => setSuccessMsg(''), 5000);
@@ -125,9 +128,14 @@ export default function SettingsPage() {
                 type={showToken ? "text" : "password"}
                 placeholder="r8_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
                 value={replicateKey}
-                onChange={(e) => {
-                  const value = e.target.value.trim();
-                  if (/^[a-zA-Z0-9_-]*$/.test(value) || value === '') {
+                onFocus={() => {
+                  if (replicateKey === MASKED_VALUE) {
+                    setReplicateKey('');
+                  }
+                }}
+              onChange={(e) => {
+                  const value = e.target.value;
+                  if (/^[r8_A-Za-z0-9_-]*$/.test(value) || value === '') {
                     setReplicateKey(value);
                   }
                 }}
@@ -190,7 +198,7 @@ export default function SettingsPage() {
             </div>
             <Button 
               onClick={handleSave} 
-              disabled={saving || !replicateKey.trim()} 
+              disabled={saving || !replicateKey.trim() || replicateKey === MASKED_VALUE} 
               className="bg-slate-900 hover:bg-slate-800"
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
