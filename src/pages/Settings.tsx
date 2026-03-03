@@ -1,82 +1,64 @@
 ﻿import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Toast } from '@/components/ui/toast';
-import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
-import { 
-  Key, Save, Check, Loader2, ExternalLink, 
-  CheckCircle2, AlertCircle, HelpCircle, Eye, EyeOff
+import {
+  Key, Save, Check, Loader2, RefreshCw,
+  CheckCircle2, Eye, EyeOff, ShieldCheck
 } from 'lucide-react';
+
+const MASKED_VALUE = 'u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}';
+const validateToken = (token: string): boolean => /^r8_\S{10,}$/.test(token);
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const { toasts, dismiss, success, error, warning } = useToast();
-  const [replicateKey, setReplicateKey] = useState('');
+  const { toasts, dismiss, success, error } = useToast();
+
+  const [hasToken, setHasToken] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [rotating, setRotating] = useState(false);
+  const [newToken, setNewToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-  const [isValidKey, setIsValidKey] = useState(false);
-  const [showToken, setShowToken] = useState(false);
-
-  const MASKED_VALUE = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
 
   useEffect(() => {
-    const loadSettings = async () => {
-      if (!user) return;
+    if (!user) return;
+    const load = async () => {
       try {
         const data = await apiClient.hasToken();
-        if (data.hasToken) {
-          setReplicateKey(MASKED_VALUE);
-          setIsValidKey(true);
-        }
+        setHasToken(data.hasToken);
       } catch {
-        // Error al cargar
+        // sin bloquear
+      } finally {
+        setLoadingStatus(false);
       }
     };
-    loadSettings();
+    load();
   }, [user]);
 
-  const validateReplicateToken = (token: string): boolean => {
-    return /^r8_\S{10,}$/.test(token);
-  };
-
-  const handleSave = async () => {
-    if (!user) {
-      error('❌ Debes iniciar sesión');
-      return;
-    }
-
-    const sanitizedToken = replicateKey.trim();
-    
-    if (!sanitizedToken || sanitizedToken === MASKED_VALUE) {
-      warning('⚠️ Ingresa tu nuevo API token');
-      return;
-    }
-
-    if (!validateReplicateToken(sanitizedToken)) {
-      error('❌ El token debe empezar con "r8_"');
-      return;
-    }
+  const handleRotate = async () => {
+    const sanitized = newToken.trim();
+    if (!sanitized) { error('Ingresa el nuevo token'); return; }
+    if (!validateToken(sanitized)) { error('El token debe empezar con r8_'); return; }
 
     setSaving(true);
     setSuccessMsg('');
-
     try {
-      await apiClient.saveToken(sanitizedToken);
-      setIsValidKey(true);
-      setReplicateKey(MASKED_VALUE);
-      setSuccessMsg('¡Guardado! Ya puedes usar todas las funciones.');
-      success('✅ Token guardado correctamente');
+      await apiClient.saveToken(sanitized);
+      setHasToken(true);
+      setNewToken('');
+      setRotating(false);
+      setSuccessMsg('Token actualizado correctamente');
+      success('Token reemplazado');
       setTimeout(() => setSuccessMsg(''), 5000);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error al guardar';
-      error(`❌ ${errorMessage}`);
+      error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -84,147 +66,120 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      <div>
         <h1 className="text-3xl font-bold text-slate-900">Ajustes</h1>
-        {isValidKey && (
-          <Badge className="bg-green-100 text-green-700 border-green-200">
-            <CheckCircle2 className="w-3 h-3 mr-1" />
-            Conectado
-          </Badge>
-        )}
+        <p className="text-sm text-slate-500 mt-1">Gestiona la configuracion de tu cuenta</p>
       </div>
 
-      {/* Status Alert */}
-      {!isValidKey && (
-        <Alert className="bg-amber-50 border-amber-200">
-          <AlertCircle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800 ml-2">
-            Necesitas configurar tu API token de Replicate para usar las funciones de IA.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* API Token Card */}
       <Card className="p-6">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-slate-900">API Token de Replicate</h2>
-            <Tooltip content="Este token conecta Removin con Replicate para procesar imágenes con IA. Es gratuito crear una cuenta." position="right">
-              <button className="text-slate-400 hover:text-slate-600">
-                <HelpCircle size={16} />
-              </button>
-            </Tooltip>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+            <ShieldCheck className="w-5 h-5 text-indigo-600" />
           </div>
-
-          {/* Input */}
-          <div className="space-y-2">
-            <Label htmlFor="replicate" className="text-sm text-slate-600">
-              Tu token (empieza con r8_)
-            </Label>
-            <div className="relative">
-              <Input 
-                id="replicate" 
-                type={showToken ? "text" : "password"}
-                placeholder="r8_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
-                value={replicateKey}
-                onFocus={() => {
-                  if (replicateKey === MASKED_VALUE) {
-                    setReplicateKey('');
-                  }
-                }}
-              onChange={(e) => {
-                  const value = e.target.value;
-                  if (/^[r8_A-Za-z0-9_-]*$/.test(value) || value === '') {
-                    setReplicateKey(value);
-                  }
-                }}
-                className="pl-10 pr-10 font-mono h-11"
-                autoComplete="off"
-                maxLength={100}
-              />
-              <Key className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-              <button
-                type="button"
-                onClick={() => setShowToken(!showToken)}
-                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
-              >
-                {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Cómo obtenerlo */}
-          <div className="bg-slate-50 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-700">¿Cómo obtener el token?</span>
-              <Tooltip content="El proceso toma menos de 2 minutos" position="right">
-                <HelpCircle size={14} className="text-slate-400" />
-              </Tooltip>
-            </div>
-            <ol className="text-sm text-slate-600 space-y-1 ml-4 list-decimal">
-              <li>Crea cuenta gratis en replicate.com</li>
-              <li>Ve a tu perfil → API tokens</li>
-              <li>Copia tu token y pégalo aquí</li>
-            </ol>
-            <a 
-              href="https://replicate.com/account/api-tokens" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mt-2"
-            >
-              Ir a Replicate
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
-
-          {/* Seguridad */}
-          <div className="flex items-start gap-2 text-xs text-slate-500">
-            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-            <span>
-              Tu token se guarda encriptado y solo se usa para conectar con Replicate. 
-              Nunca lo compartimos.
-            </span>
-          </div>
-
-          {/* Save Button */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="text-sm text-green-600 font-medium">
-              {successMsg && (
-                <span className="flex items-center gap-2">
-                  <Check size={16} /> {successMsg}
-                </span>
-              )}
-            </div>
-            <Button 
-              onClick={handleSave} 
-              disabled={saving || !replicateKey.trim() || replicateKey === MASKED_VALUE} 
-              className="bg-slate-900 hover:bg-slate-800"
-            >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Save className="mr-2 h-4 w-4" />
-              Guardar
-            </Button>
+          <div>
+            <h2 className="font-semibold text-slate-900">Token de Replicate</h2>
+            <p className="text-xs text-slate-500">Reemplaza tu token cuando lo necesites</p>
           </div>
         </div>
+
+        {loadingStatus ? (
+          <div className="flex items-center gap-2 text-sm text-slate-500 mb-4">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Verificando estado...
+          </div>
+        ) : (
+          <div className="flex items-center justify-between mb-5 p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <div className="flex items-center gap-2">
+              {hasToken ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-slate-700">Token configurado</span>
+                  <span className="font-mono text-sm text-slate-400">{MASKED_VALUE}</span>
+                </>
+              ) : (
+                <>
+                  <Key className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-medium text-slate-700">Sin token configurado</span>
+                </>
+              )}
+            </div>
+            {!rotating && (
+              <button
+                onClick={() => setRotating(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                <RefreshCw size={13} />
+                {hasToken ? 'Cambiar token' : 'Agregar token'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {rotating && (
+          <div className="space-y-4 border-t pt-5">
+            <p className="text-sm text-slate-600">
+              Pega tu nuevo token de Replicate. Reemplazara el actual de inmediato.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-token" className="text-sm text-slate-600">
+                Nuevo token
+              </Label>
+              <div className="relative">
+                <Input
+                  id="new-token"
+                  type={showToken ? 'text' : 'password'}
+                  placeholder="r8_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  value={newToken}
+                  onChange={(e) => setNewToken(e.target.value)}
+                  className="pl-10 pr-10 font-mono h-11"
+                  autoComplete="off"
+                  maxLength={100}
+                />
+                <Key className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                >
+                  {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              {newToken && !validateToken(newToken) && (
+                <p className="text-xs text-red-500">El token debe empezar con r8_</p>
+              )}
+              {newToken && validateToken(newToken) && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Formato valido
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                onClick={handleRotate}
+                disabled={saving || !validateToken(newToken.trim())}
+                className="bg-indigo-600 hover:bg-indigo-700"
+              >
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Save className="mr-2 h-4 w-4" />
+                Guardar nuevo token
+              </Button>
+              <button
+                onClick={() => { setRotating(false); setNewToken(''); }}
+                className="text-sm text-slate-500 hover:text-slate-700"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {successMsg && !rotating && (
+          <div className="flex items-center gap-2 text-sm text-green-600 font-medium mt-2">
+            <Check size={15} /> {successMsg}
+          </div>
+        )}
       </Card>
 
-      {/* Funciones desbloqueadas */}
-      {isValidKey && (
-        <Card className="p-6 border-green-200 bg-green-50">
-          <div className="flex items-center gap-2 mb-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
-            <h3 className="font-semibold text-green-900">Funciones activas</h3>
-          </div>
-          <ul className="text-sm text-green-700 space-y-1 ml-7">
-            <li>• Remover fondos de imágenes</li>
-            <li>• Generar imágenes con IA</li>
-            <li>• Monitoreo automático de carpetas</li>
-          </ul>
-        </Card>
-      )}
-
-      {/* Toasts */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
         {toasts.map((toast) => (
           <Toast
