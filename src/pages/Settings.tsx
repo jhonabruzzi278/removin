@@ -43,7 +43,7 @@ export default function SettingsPage() {
   }, [user]);
 
   const validateReplicateToken = (token: string): boolean => {
-    return /^r8_[A-Za-z0-9_-]{30,}$/.test(token);
+    return /^r8_\S{10,}$/.test(token);
   };
 
   const handleSave = async () => {
@@ -60,7 +60,7 @@ export default function SettingsPage() {
     }
 
     if (!validateReplicateToken(sanitizedToken)) {
-      error('❌ El token debe empezar con "r8_" y tener al menos 30 caracteres');
+      error('❌ El token debe empezar con "r8_"');
       return;
     }
 

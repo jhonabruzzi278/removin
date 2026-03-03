@@ -117,9 +117,9 @@ describe('safeErrorMessage() — sin filtración de errores en producción', () 
 // ── isValidReplicateToken ────────────────────────────────────────────────────
 
 describe('isValidReplicateToken() — validación de formato de token', () => {
-  const VALID_TOKEN = 'r8_' + 'a'.repeat(30); // 33 chars total
+  const VALID_TOKEN = 'r8_abc123def456'; // 15 chars total
 
-  it('acepta un token válido (prefijo r8_ y >= 33 chars)', () => {
+  it('acepta un token válido (prefijo r8_ y >= 13 chars)', () => {
     expect(isValidReplicateToken(VALID_TOKEN)).toBe(true);
   });
 
@@ -131,8 +131,13 @@ describe('isValidReplicateToken() — validación de formato de token', () => {
     expect(isValidReplicateToken('sk_' + 'a'.repeat(30))).toBe(false);
   });
 
-  it('rechaza token de exactamente 32 caracteres (demasiado corto)', () => {
-    expect(isValidReplicateToken('r8_' + 'a'.repeat(29))).toBe(false); // 32 chars
+  it('rechaza token demasiado corto (menos de 13 chars)', () => {
+    expect(isValidReplicateToken('r8_short')).toBe(false); // 8 chars
+  });
+
+  it('rechaza token con espacios (sin trim)', () => {
+    expect(isValidReplicateToken('r8_abc123def456 ')).toBe(false);
+    expect(isValidReplicateToken(' r8_abc123def456')).toBe(false);
   });
 
   it('rechaza token vacío', () => {

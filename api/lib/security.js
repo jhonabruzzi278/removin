@@ -40,12 +40,13 @@ export function safeErrorMessage(
 
 /**
  * Valida el formato del token de Replicate.
- * Debe comenzar con "r8_" y tener al menos 33 caracteres.
+ * Debe comenzar con "r8_" y tener al menos 13 caracteres.
  */
 export function isValidReplicateToken(token) {
   return (
     typeof token === 'string' &&
     token.startsWith('r8_') &&
-    token.length >= 33
+    token.trim() === token &&
+    token.length >= 13
   );
 }
