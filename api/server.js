@@ -60,6 +60,25 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10kb' }));
 
+// ============================================
+// Middleware: Audit Logging
+// ============================================
+function auditLog(req, res, next) {
+  res.on('finish', () => {
+    const uid = req.uid ? req.uid.slice(0, 8) + '…' : 'anon';
+    console.info(JSON.stringify({
+      event: 'api_request',
+      uid,
+      method: req.method,
+      endpoint: req.path,
+      status: res.statusCode,
+      ts: new Date().toISOString()
+    }));
+  });
+  next();
+}
+app.use(auditLog);
+
 // Configuración de modelos de Replicate
 const REPLICATE_MODELS = {
   'fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003': {

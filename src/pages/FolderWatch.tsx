@@ -1,4 +1,14 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+
+// Tipos para APIs experimentales del navegador (File System Access + FileSystemObserver)
+interface FileSystemObserverEntry {
+  type: 'appeared' | 'disappeared' | 'modified' | 'unknown';
+  changedHandle: FileSystemHandle;
+}
+interface FileSystemObserver {
+  observe(handle: FileSystemDirectoryHandle, options?: { recursive: boolean }): Promise<void>;
+  disconnect(): void;
+}
 import { Toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
@@ -31,10 +41,10 @@ export default function FolderWatchPage() {
   const [useObserver, setUseObserver] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const observerRef = useRef<any>(null);
+  const observerRef = useRef<FileSystemObserver | null>(null);
   const processedNamesRef = useRef<Set<string>>(new Set());
   const snapshotRef = useRef<Set<string>>(new Set());
-  const processingQueueRef = useRef<Array<{ file?: File; handle?: any; name: string }>>([]);
+  const processingQueueRef = useRef<Array<{ file?: File; handle?: FileSystemFileHandle; name: string }>>([]);
   const isProcessingRef = useRef(false);
   const isMonitoringRef = useRef(false);
   const whiteBackgroundRef = useRef(whiteBackground);
@@ -207,7 +217,7 @@ export default function FolderWatchPage() {
     }
   };
 
-  const waitForFileReady = async (handle: any): Promise<File> => {
+  const waitForFileReady = async (handle: FileSystemFileHandle): Promise<File> => {
     let prevFile = await handle.getFile();
     let retries = 0;
     
@@ -543,7 +553,7 @@ export default function FolderWatchPage() {
     if (hasObserverAPI && typeof (self as any).FileSystemObserver !== 'undefined') {
       try {
         const Observer = (self as any).FileSystemObserver;
-        const observer = new Observer(async (records: any[]) => {
+        const observer = new Observer(async (records: FileSystemObserverEntry[]) => {
           let hasNewFiles = false;
 
           for (const record of records) {
@@ -554,12 +564,12 @@ export default function FolderWatchPage() {
                 // CORRECCIÓN: Usar changedHandle, no root
                 const handle = record.changedHandle;
                 if (handle && handle.kind === 'file') {
-                  const file = await handle.getFile();
+                  const file = await (handle as FileSystemFileHandle).getFile();
                   
                   if (file.type.startsWith('image/') && !processedNamesRef.current.has(file.name)) {
                     processedNamesRef.current.add(file.name);
                     setTrackedCount(processedNamesRef.current.size);
-                    processingQueueRef.current.push({ handle, name: file.name });
+                    processingQueueRef.current.push({ handle: handle as FileSystemFileHandle, name: file.name });
                     hasNewFiles = true;
                   }
                 }
