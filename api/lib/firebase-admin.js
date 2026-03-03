@@ -126,7 +126,7 @@ export async function saveUserReplicateToken(uid, token) {
   try {
     const db = firebase.database();
     
-    await db.ref(`users/${uid}`).set({
+    await db.ref(`users/${uid}`).update({
       replicateToken: token,
       updatedAt: Date.now()
     });
