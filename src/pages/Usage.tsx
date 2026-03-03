@@ -1,5 +1,4 @@
-﻿import { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
+﻿import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -8,30 +7,9 @@ import {
   HelpCircle, Package, Zap
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { apiClient } from '@/lib/api';
 
 export default function UsagePage() {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [hasApiKey, setHasApiKey] = useState(false);
-
-  useEffect(() => {
-    const checkApiKey = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const data = await apiClient.hasToken();
-        setHasApiKey(data.hasToken);
-      } catch {
-        setHasApiKey(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkApiKey();
-  }, [user]);
+  const { hasToken, checkingToken } = useAuth();
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -46,7 +24,7 @@ export default function UsagePage() {
       </div>
 
       {/* Alert si no tiene API key */}
-      {!loading && !hasApiKey && (
+      {!checkingToken && !hasToken && (
         <Alert className="border-amber-200 bg-amber-50">
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-900 ml-2 flex items-center justify-between">

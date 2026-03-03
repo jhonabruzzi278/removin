@@ -11,63 +11,24 @@ interface UsageStats {
 }
 
 export function DashboardLayout() {
-  const { user, signOut, sessionWarning, extendSession } = useAuth();
+  const { user, signOut, sessionWarning, extendSession, hasToken, checkingToken } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [stats, setStats] = useState<UsageStats>({ thisMonth: 0, estimatedCost: 0 });
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [checkingToken, setCheckingToken] = useState(true);
-  const [hasToken, setHasToken] = useState(false);
   const [countdown, setCountdown] = useState(120);
 
-  // Verificar si el usuario tiene token configurado (solo al cambiar de usuario)
+  // Redirigir a onboarding si no tiene token (solo cuando termine de verificar)
   useEffect(() => {
-    if (!user) {
-      setCheckingToken(false);
-      return;
+    if (checkingToken) return; // Esperar a que termine de verificar
+    if (!user) return;
+    if (location.pathname === '/onboarding') return; // No redirigir si ya está en onboarding
+    
+    if (!hasToken) {
+      navigate('/onboarding', { replace: true });
     }
-    
-    const checkUserToken = async () => {
-      try {
-        const response = await apiClient.hasToken();
-        setHasToken(response.hasToken);
-        
-        // Si no tiene token, redirigir al onboarding
-        if (!response.hasToken) {
-          navigate('/onboarding', { replace: true });
-        }
-      } catch {
-        // Error verificando token, permitir acceso por ahora
-        setHasToken(true);
-      } finally {
-        setCheckingToken(false);
-      }
-    };
-    
-    checkUserToken();
-  }, [user, navigate]);
-
-  // Re-verificar token cuando el usuario regresa del onboarding al dashboard
-  useEffect(() => {
-    if (!user || hasToken) return;
-    if (location.pathname === '/onboarding') return;
-
-    // El usuario llegó a una ruta del dashboard pero hasToken es false:
-    // puede que acabe de guardar el token en onboarding
-    const recheck = async () => {
-      try {
-        const response = await apiClient.hasToken();
-        setHasToken(response.hasToken);
-        if (!response.hasToken) {
-          navigate('/onboarding', { replace: true });
-        }
-      } catch {
-        setHasToken(true);
-      }
-    };
-    recheck();
-  }, [location.pathname, user, hasToken, navigate]);
+  }, [checkingToken, hasToken, user, location.pathname, navigate]);
 
   useEffect(() => {
     if (!user) return;

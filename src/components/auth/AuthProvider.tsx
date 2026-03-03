@@ -1,6 +1,7 @@
 import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import { type User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, isConfigured } from '@/lib/firebase';
+import { apiClient } from '@/lib/api';
 
 // 30 minutos de inactividad → cierre de sesión automático
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
@@ -12,6 +13,9 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   sessionWarning: boolean;
+  hasToken: boolean;
+  checkingToken: boolean;
+  refreshTokenStatus: () => Promise<void>;
   signOut: () => Promise<void>;
   extendSession: () => void;
 };
@@ -20,6 +24,9 @@ const AuthContext = createContext<AuthContextType>({
   user: null, 
   loading: true, 
   sessionWarning: false,
+  hasToken: false,
+  checkingToken: true,
+  refreshTokenStatus: async () => {},
   signOut: async () => {},
   extendSession: () => {},
 });
@@ -28,9 +35,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(!isConfigured || !auth ? false : true);
   const [sessionWarning, setSessionWarning] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
+  const [checkingToken, setCheckingToken] = useState(true);
 
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Verificar si el usuario tiene token de Replicate configurado
+  const refreshTokenStatus = useCallback(async () => {
+    if (!user) {
+      setHasToken(false);
+      setCheckingToken(false);
+      return;
+    }
+
+    setCheckingToken(true);
+    try {
+      const response = await apiClient.hasToken();
+      setHasToken(response.hasToken);
+    } catch (error) {
+      console.error('Error verificando token:', error);
+      // En caso de error, asumir que no tiene token para forzar onboarding
+      setHasToken(false);
+    } finally {
+      setCheckingToken(false);
+    }
+  }, [user]);
 
   const clearTimers = useCallback(() => {
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
@@ -82,6 +112,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  // Verificar token cuando el usuario cambia (login/logout)
+  useEffect(() => {
+    refreshTokenStatus();
+  }, [refreshTokenStatus]);
+
+  // Re-verificar token cuando la ventana recupera el foco (usuario volvió de Settings)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        refreshTokenStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user, refreshTokenStatus]);
+
   const signOut = async () => {
     if (auth) await firebaseSignOut(auth);
   };
@@ -92,7 +138,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [resetTimers]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, sessionWarning, signOut, extendSession }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      sessionWarning, 
+      hasToken, 
+      checkingToken,
+      refreshTokenStatus,
+      signOut, 
+      extendSession 
+    }}>
       {children}
     </AuthContext.Provider>
   );

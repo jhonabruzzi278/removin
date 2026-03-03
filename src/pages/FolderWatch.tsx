@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 
 // Tipos para APIs experimentales del navegador (File System Access + FileSystemObserver)
 interface FileSystemObserverEntry {
@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 export default function FolderWatchPage() {
-  const { user } = useAuth();
+  const { user, hasToken, checkingToken } = useAuth();
   const { toasts, dismiss, success, error, info } = useToast();
   const [inputDir, setInputDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [outputDir, setOutputDir] = useState<FileSystemDirectoryHandle | null>(null);
@@ -42,8 +42,6 @@ export default function FolderWatchPage() {
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
   const [scanCount, setScanCount] = useState(0);
   const [whiteBackground, setWhiteBackground] = useState(false);
-  const [hasReplicateToken, setHasReplicateToken] = useState(false);
-  const [checkingToken, setCheckingToken] = useState(true);
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [useObserver, setUseObserver] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
@@ -114,37 +112,6 @@ export default function FolderWatchPage() {
     
     return () => clearInterval(interval);
   }, [isMonitoring, lastScanTimeMs]);
-
-  // Verificar si el usuario tiene configurado el token de Replicate
-  const checkToken = useCallback(async () => {
-    if (!user) {
-      setCheckingToken(false);
-      return;
-    }
-    setCheckingToken(true);
-    try {
-      const data = await apiClient.hasToken();
-      setHasReplicateToken(data.hasToken);
-    } catch {
-      setHasReplicateToken(false);
-    } finally {
-      setCheckingToken(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    // Verificar al montar
-    checkToken();
-
-    // Re-verificar cuando la pestaña vuelve a ser visible (el usuario regresó de Ajustes)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        checkToken();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [checkToken]);
 
   // RF-3: Restaurar carpetas guardadas desde IndexedDB al montar
   useEffect(() => {
@@ -547,7 +514,7 @@ export default function FolderWatchPage() {
       return;
     }
 
-    if (!hasReplicateToken) {
+    if (!hasToken) {
       error('❌ Debes configurar tu token de Replicate en Ajustes primero');
       return;
     }
@@ -820,19 +787,13 @@ export default function FolderWatchPage() {
         )}
 
         {/* Token no configurado */}
-        {!checkingToken && !hasReplicateToken && (
+        {!checkingToken && !hasToken && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-amber-100 border-2 border-amber-400">
             <AlertCircle className="h-4 w-4 text-amber-700 flex-shrink-0" />
             <p className="text-sm font-medium text-amber-900 flex-1">
               <span className="font-bold">Token requerido:</span> Configura tu token de Replicate para usar esta función.
             </p>
             <div className="flex items-center gap-3 self-start sm:self-auto">
-              <button
-                onClick={checkToken}
-                className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap flex items-center gap-1"
-              >
-                <RefreshCw size={12} /> Reintentar
-              </button>
               <button
                 onClick={() => window.location.href = '/settings'}
                 className="text-xs font-bold text-amber-900 underline underline-offset-2 hover:text-amber-700 whitespace-nowrap"
@@ -995,7 +956,7 @@ export default function FolderWatchPage() {
       </div>
 
       {/* ── Aviso de configuración pendiente ── */}
-      {(!inputDir || !outputDir || !selectedModel || (!checkingToken && !hasReplicateToken)) && !isMonitoring && (
+      {(!inputDir || !outputDir || !selectedModel || (!checkingToken && !hasToken)) && !isMonitoring && (
         <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-100 border-2 border-slate-300">
           <Info className="h-4 w-4 text-slate-600 flex-shrink-0" />
           <p className="text-sm font-medium text-slate-700">
@@ -1013,7 +974,7 @@ export default function FolderWatchPage() {
         {!isMonitoring ? (
           <button
             onClick={startMonitoring}
-            disabled={!inputDir || !outputDir || !selectedModel || !hasReplicateToken || checkingToken}
+            disabled={!inputDir || !outputDir || !selectedModel || !hasToken || checkingToken}
             className="flex-1 inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-bold tracking-wide transition-all duration-150 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           >
             <Play className="w-4 h-4" />

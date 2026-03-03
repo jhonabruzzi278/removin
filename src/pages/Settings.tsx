@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,31 +16,14 @@ const MASKED_VALUE = '••••••••••••••••';
 const validateToken = (token: string): boolean => /^r8_\S{10,}$/.test(token);
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { hasToken, checkingToken: loadingStatus, refreshTokenStatus } = useAuth();
   const { toasts, dismiss, success, error } = useToast();
 
-  const [hasToken, setHasToken] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState(true);
   const [rotating, setRotating] = useState(false);
   const [newToken, setNewToken] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-
-  useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      try {
-        const data = await apiClient.hasToken();
-        setHasToken(data.hasToken);
-      } catch {
-        // sin bloquear
-      } finally {
-        setLoadingStatus(false);
-      }
-    };
-    load();
-  }, [user]);
 
   const handleRotate = async () => {
     const sanitized = newToken.trim();
@@ -51,7 +34,7 @@ export default function SettingsPage() {
     setSuccessMsg('');
     try {
       await apiClient.saveToken(sanitized);
-      setHasToken(true);
+      await refreshTokenStatus(); // Actualizar el contexto
       setNewToken('');
       setRotating(false);
       setSuccessMsg('Token actualizado correctamente');
