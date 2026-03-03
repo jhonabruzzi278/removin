@@ -978,13 +978,15 @@ export default function FolderWatchPage() {
       </div>
 
       {/* ── Aviso de configuración pendiente ── */}
-      {(!inputDir || !outputDir || !selectedModel) && !isMonitoring && (
+      {(!inputDir || !outputDir || !selectedModel || (!checkingToken && !hasReplicateToken)) && !isMonitoring && (
         <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-100 border-2 border-slate-300">
           <Info className="h-4 w-4 text-slate-600 flex-shrink-0" />
           <p className="text-sm font-medium text-slate-700">
             {!inputDir || !outputDir
               ? "Selecciona la carpeta de entrada y salida para continuar"
-              : "Selecciona un modelo de IA para continuar"}
+              : !selectedModel
+              ? "Selecciona un modelo de IA para continuar"
+              : "Configura tu token de Replicate en Ajustes para continuar"}
           </p>
         </div>
       )}
@@ -994,7 +996,7 @@ export default function FolderWatchPage() {
         {!isMonitoring ? (
           <button
             onClick={startMonitoring}
-            disabled={!inputDir || !outputDir || !selectedModel}
+            disabled={!inputDir || !outputDir || !selectedModel || !hasReplicateToken || checkingToken}
             className="flex-1 inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-bold tracking-wide transition-all duration-150 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           >
             <Play className="w-4 h-4" />
