@@ -51,7 +51,7 @@ describe('ApiClient.hasToken()', () => {
   });
 
   it('lanza error si no hay sesión activa', async () => {
-    const { auth } = require('@/lib/firebase');
+    const { auth } = jest.requireMock('@/lib/firebase') as { auth: { currentUser: unknown } };
     const original = auth.currentUser;
     auth.currentUser = null;
 

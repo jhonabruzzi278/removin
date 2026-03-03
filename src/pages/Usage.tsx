@@ -16,25 +16,22 @@ export default function UsagePage() {
   const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
+    const checkApiKey = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const data = await apiClient.hasToken();
+        setHasApiKey(data.hasToken);
+      } catch {
+        setHasApiKey(false);
+      } finally {
+        setLoading(false);
+      }
+    };
     checkApiKey();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
-  const checkApiKey = async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      const data = await apiClient.hasToken();
-      setHasApiKey(data.hasToken);
-    } catch {
-      setHasApiKey(false);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">

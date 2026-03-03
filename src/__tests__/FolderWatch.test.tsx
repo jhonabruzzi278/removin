@@ -183,7 +183,7 @@ describe('FolderWatchPage - navegador no compatible', () => {
   it('muestra aviso de compatibilidad cuando FileSystem API no está disponible', () => {
     // Quitar temporalmente showDirectoryPicker para simular navegador sin soporte
     const descriptor = Object.getOwnPropertyDescriptor(window, 'showDirectoryPicker');
-    // @ts-ignore
+    // @ts-expect-error -- eliminando propiedad experimental para test
     delete window.showDirectoryPicker;
 
     render(<FolderWatchPage />);

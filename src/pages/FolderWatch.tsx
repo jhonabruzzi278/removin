@@ -9,6 +9,13 @@ interface FileSystemObserver {
   observe(handle: FileSystemDirectoryHandle, options?: { recursive: boolean }): Promise<void>;
   disconnect(): void;
 }
+interface FileSystemDirectoryHandleWithPermissions extends FileSystemDirectoryHandle {
+  queryPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
+  requestPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
+}
+interface WindowWithFileSystemObserver {
+  FileSystemObserver: new (callback: (records: FileSystemObserverEntry[]) => void) => FileSystemObserver;
+}
 import { Toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
@@ -96,8 +103,9 @@ export default function FolderWatchPage() {
   });
 
   // Actualizar UI cada segundo para mostrar tiempo desde último escaneo
+  const lastScanTimeMs = lastScanTime?.getTime();
   useEffect(() => {
-    if (!isMonitoring || !lastScanTime) return;
+    if (!isMonitoring || lastScanTimeMs == null) return;
     
     const interval = setInterval(() => {
       // Forzar re-render para actualizar "hace X segundos"
@@ -105,7 +113,7 @@ export default function FolderWatchPage() {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [isMonitoring, lastScanTime?.getTime()]);
+  }, [isMonitoring, lastScanTimeMs]);
 
   // Verificar si el usuario tiene configurado el token de Replicate
   useEffect(() => {
@@ -138,10 +146,11 @@ export default function FolderWatchPage() {
         
         if (inputHandle) {
           // Verificar y solicitar permisos si es necesario
-          const inputPermission = await (inputHandle as any).queryPermission({ mode: 'read' });
+          const h = inputHandle as FileSystemDirectoryHandleWithPermissions;
+          const inputPermission = await h.queryPermission({ mode: 'read' });
           if (inputPermission === 'granted' || inputPermission === 'prompt') {
             if (inputPermission === 'prompt') {
-              const granted = await (inputHandle as any).requestPermission({ mode: 'read' });
+              const granted = await h.requestPermission({ mode: 'read' });
               if (granted === 'granted') {
                 setInputDir(inputHandle);
                 info('📁 Carpeta de entrada restaurada');
@@ -154,10 +163,11 @@ export default function FolderWatchPage() {
         }
         
         if (outputHandle) {
-          const outputPermission = await (outputHandle as any).queryPermission({ mode: 'readwrite' });
+          const h = outputHandle as FileSystemDirectoryHandleWithPermissions;
+          const outputPermission = await h.queryPermission({ mode: 'readwrite' });
           if (outputPermission === 'granted' || outputPermission === 'prompt') {
             if (outputPermission === 'prompt') {
-              const granted = await (outputHandle as any).requestPermission({ mode: 'readwrite' });
+              const granted = await h.requestPermission({ mode: 'readwrite' });
               if (granted === 'granted') {
                 setOutputDir(outputHandle);
                 info('💾 Carpeta de salida restaurada');
@@ -180,6 +190,7 @@ export default function FolderWatchPage() {
     } else {
       setIsRestoring(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- info e isSupported son valores estables que no cambian entre renders
   }, []);
 
   const selectInputFolder = async () => {
@@ -442,7 +453,6 @@ export default function FolderWatchPage() {
     setLastScanTime(scanTime);
 
     try {
-      let filesFound = 0;
       let newFilesFound = 0;
       
       for await (const entry of inputDir.values()) {
@@ -450,8 +460,6 @@ export default function FolderWatchPage() {
           const file = await entry.getFile();
           
           if (file.type.startsWith('image/')) {
-            filesFound++;
-            
             const inSnapshot = snapshotRef.current.has(file.name);
             const inProcessed = processedNamesRef.current.has(file.name);
             
@@ -550,9 +558,9 @@ export default function FolderWatchPage() {
     info(`📸 Snapshot creado: ${existingCount} archivos existentes ignorados`);
     
     // RF-1: Intentar usar FileSystemObserver si está disponible
-    if (hasObserverAPI && typeof (self as any).FileSystemObserver !== 'undefined') {
+    if (hasObserverAPI && typeof (self as unknown as WindowWithFileSystemObserver).FileSystemObserver !== 'undefined') {
       try {
-        const Observer = (self as any).FileSystemObserver;
+        const Observer = (self as unknown as WindowWithFileSystemObserver).FileSystemObserver;
         const observer = new Observer(async (records: FileSystemObserverEntry[]) => {
           let hasNewFiles = false;
 

@@ -6,7 +6,8 @@ describe('cn() - class name merger', () => {
   });
 
   it('ignora valores falsy', () => {
-    expect(cn('a', false && 'b', undefined, null, 'c')).toBe('a c');
+    const condition = false as boolean;
+    expect(cn('a', condition && 'b', undefined, null, 'c')).toBe('a c');
   });
 
   it('resuelve conflictos de Tailwind (la última gana)', () => {

@@ -26,7 +26,7 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isConfigured || !auth ? false : true);
   const [sessionWarning, setSessionWarning] = useState(false);
 
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -35,11 +35,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearTimers = useCallback(() => {
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
     if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    setSessionWarning(false);
   }, []);
 
   const resetTimers = useCallback(() => {
-    clearTimers();
-    setSessionWarning(false);
+    clearTimers(); // clearTimers ya llama setSessionWarning(false)
 
     warningTimerRef.current = setTimeout(() => {
       setSessionWarning(true);
@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Iniciar/detener listeners de actividad según si hay usuario logueado
   useEffect(() => {
     if (!user) {
-      clearTimers();
-      setSessionWarning(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      clearTimers(); // clearTimers resetea sessionWarning internamente
       return;
     }
 
@@ -69,10 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, resetTimers, clearTimers]);
 
   useEffect(() => {
-    if (!isConfigured || !auth) {
-      setLoading(false);
-      return;
-    }
+    if (!isConfigured || !auth) return; // loading ya inicializa en false cuando !isConfigured
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);

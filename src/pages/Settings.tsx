@@ -25,23 +25,20 @@ export default function SettingsPage() {
   const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
-    loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
-  const loadSettings = async () => {
-    if (!user) return;
-
-    try {
-      const data = await apiClient.hasToken();
-      if (data.hasToken) {
-        setReplicateKey('••••••••••••••••');
-        setIsValidKey(true);
+    const loadSettings = async () => {
+      if (!user) return;
+      try {
+        const data = await apiClient.hasToken();
+        if (data.hasToken) {
+          setReplicateKey('\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022');
+          setIsValidKey(true);
+        }
+      } catch {
+        // Error al cargar
       }
-    } catch {
-      // Error al cargar
-    }
-  };
+    };
+    loadSettings();
+  }, [user]);
 
   const validateReplicateToken = (token: string): boolean => {
     return /^r8_[A-Za-z0-9_-]{30,}$/.test(token);
