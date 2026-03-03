@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 
 // Tipos para APIs experimentales del navegador (File System Access + FileSystemObserver)
 interface FileSystemObserverEntry {
@@ -116,26 +116,35 @@ export default function FolderWatchPage() {
   }, [isMonitoring, lastScanTimeMs]);
 
   // Verificar si el usuario tiene configurado el token de Replicate
+  const checkToken = useCallback(async () => {
+    if (!user) {
+      setCheckingToken(false);
+      return;
+    }
+    setCheckingToken(true);
+    try {
+      const data = await apiClient.hasToken();
+      setHasReplicateToken(data.hasToken);
+    } catch {
+      setHasReplicateToken(false);
+    } finally {
+      setCheckingToken(false);
+    }
+  }, [user]);
+
   useEffect(() => {
-    const checkToken = async () => {
-      if (!user) {
-        setCheckingToken(false);
-        return;
-      }
-      
-      try {
-        const data = await apiClient.hasToken();
-        setHasReplicateToken(data.hasToken);
-      } catch {
-        // Error verificando token
-        setHasReplicateToken(false);
-      } finally {
-        setCheckingToken(false);
+    // Verificar al montar
+    checkToken();
+
+    // Re-verificar cuando la pestaña vuelve a ser visible (el usuario regresó de Ajustes)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkToken();
       }
     };
-    
-    checkToken();
-  }, [user]);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [checkToken]);
 
   // RF-3: Restaurar carpetas guardadas desde IndexedDB al montar
   useEffect(() => {
@@ -817,12 +826,20 @@ export default function FolderWatchPage() {
             <p className="text-sm font-medium text-amber-900 flex-1">
               <span className="font-bold">Token requerido:</span> Configura tu token de Replicate para usar esta función.
             </p>
-            <button
-              onClick={() => window.location.href = '/settings'}
-              className="text-xs font-bold text-amber-900 underline underline-offset-2 hover:text-amber-700 whitespace-nowrap self-start sm:self-auto"
-            >
-              Ir a Ajustes →
-            </button>
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              <button
+                onClick={checkToken}
+                className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap flex items-center gap-1"
+              >
+                <RefreshCw size={12} /> Reintentar
+              </button>
+              <button
+                onClick={() => window.location.href = '/settings'}
+                className="text-xs font-bold text-amber-900 underline underline-offset-2 hover:text-amber-700 whitespace-nowrap"
+              >
+                Ir a Ajustes →
+              </button>
+            </div>
           </div>
         )}
       </div>
