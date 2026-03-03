@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { Bell, Coins, Settings, LogOut, CreditCard, Loader2 } from 'lucide-react';
+import { Bell, Coins, Settings, LogOut, CreditCard, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api';
@@ -11,7 +11,7 @@ interface UsageStats {
 }
 
 export function DashboardLayout() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, sessionWarning, extendSession } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [stats, setStats] = useState<UsageStats>({ thisMonth: 0, estimatedCost: 0 });
@@ -19,6 +19,7 @@ export function DashboardLayout() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
   const [hasToken, setHasToken] = useState(false);
+  const [countdown, setCountdown] = useState(120);
 
   // Verificar si el usuario tiene token configurado
   useEffect(() => {
@@ -72,9 +73,26 @@ export function DashboardLayout() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Countdown regresivo de 2 minutos cuando hay aviso de sesión
+  useEffect(() => {
+    if (!sessionWarning) {
+      setCountdown(120);
+      return;
+    }
+    const interval = setInterval(() => {
+      setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [sessionWarning]);
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/login');
+  };
+
+  const handleExtendSession = () => {
+    extendSession();
+    setCountdown(120);
   };
 
   const getPageTitle = () => {
@@ -234,6 +252,25 @@ export function DashboardLayout() {
             </div>
           </div>
         </header>
+
+        {/* Banner de advertencia de inactividad */}
+        {sessionWarning && (
+          <div className="sticky top-14 z-30 flex items-center justify-between gap-4 px-6 py-3 bg-amber-50 border-b-2 border-amber-400">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <p className="text-sm font-semibold text-amber-900">
+                Tu sesión cerrará por inactividad en{' '}
+                <span className="font-black tabular-nums">{Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}</span>
+              </p>
+            </div>
+            <button
+              onClick={handleExtendSession}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors whitespace-nowrap"
+            >
+              Continuar sesión
+            </button>
+          </div>
+        )}
 
         {/* Dynamic Page Content */}
         <main className="flex-1 p-8">
