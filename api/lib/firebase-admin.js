@@ -116,8 +116,6 @@ export async function getUserReplicateToken(uid) {
  * Guardar token de Replicate del usuario en Realtime Database
  */
 export async function saveUserReplicateToken(uid, token) {
-  console.log('📝 saveUserReplicateToken llamado para uid:', uid?.slice(0, 8));
-  
   const firebase = initializeFirebase();
   
   if (!firebase) {
@@ -126,7 +124,6 @@ export async function saveUserReplicateToken(uid, token) {
   }
 
   try {
-    console.log('📝 Intentando guardar en Realtime Database...');
     const db = firebase.database();
     
     await db.ref(`users/${uid}`).set({
@@ -134,7 +131,6 @@ export async function saveUserReplicateToken(uid, token) {
       updatedAt: Date.now()
     });
 
-    console.log('✅ Token guardado exitosamente');
     return { success: true, error: null };
   } catch (error) {
     console.error('❌ Error guardando token:', error.message);

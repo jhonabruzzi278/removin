@@ -81,13 +81,10 @@ const REPLICATE_MODELS = {
 // ============================================
 async function authenticateUser(req, res, next) {
   const authHeader = req.headers.authorization;
-  console.log('🔐 authenticateUser - header presente:', !!authHeader);
   
   const { uid, error } = await verifyAuthToken(authHeader);
-  console.log('🔐 Resultado auth:', { uid: uid?.slice(0, 8), error });
   
   if (error || !uid) {
-    console.log('❌ Auth failed:', error);
     return res.status(401).json({ error: error || 'No autenticado' });
   }
   
@@ -95,8 +92,6 @@ async function authenticateUser(req, res, next) {
   next();
 }
 
-// ============================================
-// GET /api/health
 // ============================================
 // GET /api/health
 // ============================================
@@ -123,30 +118,22 @@ app.get('/api/user/token', tokenLimiter, authenticateUser, async (req, res) => {
 // ============================================
 app.post('/api/user/token', tokenLimiter, authenticateUser, async (req, res) => {
   try {
-    console.log('📝 POST /api/user/token - uid:', req.uid?.slice(0, 8));
-    
     const { token } = req.body;
-    console.log('📝 Token recibido:', token ? `${token.slice(0, 10)}...` : 'null');
     
     // Validar formato del token con helper de seguridad
     if (!isValidReplicateToken(token)) {
-      console.log('❌ Token inválido');
       return res.status(400).json({ error: 'Token de Replicate inválido. Debe empezar con r8_ y tener al menos 33 caracteres.' });
     }
     
-    console.log('📝 Llamando a saveUserReplicateToken...');
     const { success, error } = await saveUserReplicateToken(req.uid, token);
-    console.log('📝 Resultado:', { success, error });
     
     if (!success) {
-      console.log('\u274c Error guardando token');
       return res.status(500).json({ error: 'Error al guardar token' });
     }
     
-    console.log('\u2705 Token guardado exitosamente');
     res.json({ success: true, message: 'Token guardado correctamente' });
   } catch (err) {
-    console.error('\u274c Error en POST /api/user/token:', err);
+    console.error('Error en POST /api/user/token:', err);
     res.status(500).json({ error: 'Error al guardar token' });
   }
 });
@@ -168,7 +155,7 @@ app.post('/api/remove-bg', apiLimiter, authenticateUser, async (req, res) => {
     }
     
     // Obtener token de Replicate del USUARIO
-    const { token: userToken, error: tokenError } = await getUserReplicateToken(req.uid);
+    const { token: userToken } = await getUserReplicateToken(req.uid);
     
     if (!userToken) {
       return res.status(400).json({ 
