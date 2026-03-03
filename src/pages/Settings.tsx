@@ -12,7 +12,7 @@ import {
   CheckCircle2, Eye, EyeOff, ShieldCheck
 } from 'lucide-react';
 
-const MASKED_VALUE = 'u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}u{2022}';
+const MASKED_VALUE = '••••••••••••••••';
 const validateToken = (token: string): boolean => /^r8_\S{10,}$/.test(token);
 
 export default function SettingsPage() {

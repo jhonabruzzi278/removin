@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { uploadFile, getPublicUrl } from '@/lib/firebase';
+import { uploadFile, getPublicUrl, deleteFile } from '@/lib/firebase';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
@@ -36,6 +36,7 @@ export function useImageProcessor() {
         const batch = files.slice(i, i + batchSize);
         
         await Promise.all(batch.map(async (localImg) => {
+          let uploadedPath: string | null = null;
           try {
             // Validar archivo
             if (!localImg.file.type.startsWith('image/')) {
@@ -58,6 +59,7 @@ export function useImageProcessor() {
             const { error: uploadError } = await uploadFile(filePath, localImg.file);
 
             if (uploadError) throw uploadError;
+            uploadedPath = filePath; // marcar como subido para cleanup
 
             // 2. Obtener URL pública
             const publicUrl = await getPublicUrl(filePath);
@@ -84,6 +86,11 @@ export function useImageProcessor() {
               results.set(localImg.id, 'ERROR:PROCESSING');
             } else {
               results.set(localImg.id, 'ERROR');
+            }
+          } finally {
+            // Limpiar archivo temporal de Storage siempre (éxito o error)
+            if (uploadedPath) {
+              await deleteFile(uploadedPath).catch(() => {/* silenciar errores de cleanup */});
             }
           }
         }));
