@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { 
@@ -7,13 +8,22 @@ import {
   getUserReplicateToken, 
   saveUserReplicateToken 
 } from './lib/firebase-admin.js';
+import { isAllowedImageUrl, safeErrorMessage, isValidReplicateToken } from './lib/security.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// Rate Limiter: máximo 5 peticiones por minuto
+// ============================================
+// Security Headers (Helmet)
+// ============================================
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// Rate Limiter para rutas de procesamiento: máximo 5 peticiones por minuto
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -25,16 +35,30 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// CORS
-const allowedOrigins = process.env.NODE_ENV === 'production'
+// Rate Limiter para rutas de autenticación/token: máximo 20 peticiones por minuto
+const tokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: 'Demasiadas peticiones al endpoint de token.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// CORS - lista blanca estricta según entorno
+const allowedOrigins = IS_PRODUCTION
   ? [process.env.FRONTEND_URL || 'https://removin.vercel.app']
   : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (ej. Postman en dev) solo en desarrollo
+    if (!origin && !IS_PRODUCTION) return callback(null, true);
+    if (origin && allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('CORS: origen no permitido'));
+  },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 // Configuración de modelos de Replicate
 const REPLICATE_MODELS = {
@@ -83,33 +107,29 @@ app.get('/api/health', (req, res) => {
 // ============================================
 // GET /api/user/token - Verificar si el usuario tiene token
 // ============================================
-app.get('/api/user/token', authenticateUser, async (req, res) => {
+app.get('/api/user/token', tokenLimiter, authenticateUser, async (req, res) => {
   try {
     const { token, error } = await getUserReplicateToken(req.uid);
-    
-    if (error) {
-      return res.json({ hasToken: false });
-    }
-    
+    if (error) return res.json({ hasToken: false });
     res.json({ hasToken: !!token });
-  } catch (error) {
-    console.error('Error fetching token:', error);
+  } catch (err) {
+    console.error('Error fetching token:', err);
     res.status(500).json({ error: 'Error al verificar token' });
   }
-});
+})
 
 // ============================================
 // POST /api/user/token - Guardar token del usuario
 // ============================================
-app.post('/api/user/token', authenticateUser, async (req, res) => {
+app.post('/api/user/token', tokenLimiter, authenticateUser, async (req, res) => {
   try {
     console.log('📝 POST /api/user/token - uid:', req.uid?.slice(0, 8));
     
     const { token } = req.body;
     console.log('📝 Token recibido:', token ? `${token.slice(0, 10)}...` : 'null');
     
-    // Validar formato del token
-    if (!token || !token.startsWith('r8_') || token.length < 33) {
+    // Validar formato del token con helper de seguridad
+    if (!isValidReplicateToken(token)) {
       console.log('❌ Token inválido');
       return res.status(400).json({ error: 'Token de Replicate inválido. Debe empezar con r8_ y tener al menos 33 caracteres.' });
     }
@@ -119,15 +139,15 @@ app.post('/api/user/token', authenticateUser, async (req, res) => {
     console.log('📝 Resultado:', { success, error });
     
     if (!success) {
-      console.log('❌ Error guardando token:', error);
-      return res.status(500).json({ error: error || 'Error al guardar token', details: error });
+      console.log('\u274c Error guardando token');
+      return res.status(500).json({ error: 'Error al guardar token' });
     }
     
-    console.log('✅ Token guardado exitosamente');
+    console.log('\u2705 Token guardado exitosamente');
     res.json({ success: true, message: 'Token guardado correctamente' });
-  } catch (error) {
-    console.error('❌ Error en POST /api/user/token:', error);
-    res.status(500).json({ error: 'Error al guardar token', details: error.message });
+  } catch (err) {
+    console.error('\u274c Error en POST /api/user/token:', err);
+    res.status(500).json({ error: 'Error al guardar token' });
   }
 });
 
@@ -141,9 +161,10 @@ app.post('/api/remove-bg', apiLimiter, authenticateUser, async (req, res) => {
     if (!imageUrl) {
       return res.status(400).json({ error: 'imageUrl es requerido' });
     }
-    
-    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-      return res.status(400).json({ error: 'URL de imagen inválida' });
+
+    // SSRF protection: solo se permiten URLs de Firebase Storage
+    if (!isAllowedImageUrl(imageUrl)) {
+      return res.status(400).json({ error: 'URL de imagen no permitida' });
     }
     
     // Obtener token de Replicate del USUARIO
@@ -203,9 +224,9 @@ app.post('/api/remove-bg', apiLimiter, authenticateUser, async (req, res) => {
     console.log(`✅ [${req.uid.slice(0,8)}] Imagen procesada`);
     res.json({ success: true, outputUrl: result.output });
     
-  } catch (error) {
-    console.error('Error en remove-bg:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Error en remove-bg:', err);
+    res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
@@ -243,13 +264,17 @@ app.post('/api/generate-image', apiLimiter, authenticateUser, async (req, res) =
       });
     }
     
+    const ALLOWED_DIMENSIONS = [512, 768, 1024];
+    const safeWidth = ALLOWED_DIMENSIONS.includes(width) ? width : 1024;
+    const safeHeight = ALLOWED_DIMENSIONS.includes(height) ? height : 1024;
+
     const input = {
       prompt,
       negative_prompt: negative_prompt || 'ugly, blurry, poor quality',
       num_inference_steps: Math.min(Math.max(num_inference_steps || 30, 10), 50),
       guidance_scale: Math.min(Math.max(guidance_scale || 7.5, 1), 20),
-      width: width || 1024,
-      height: height || 1024,
+      width: safeWidth,
+      height: safeHeight,
     };
     
     if (scheduler) input.scheduler = scheduler;
@@ -289,9 +314,9 @@ app.post('/api/generate-image', apiLimiter, authenticateUser, async (req, res) =
     console.log(`✅ [${req.uid.slice(0,8)}] Imagen generada`);
     res.json({ success: true, outputUrl: result.output[0] });
     
-  } catch (error) {
-    console.error('Error en generate-image:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Error en generate-image:', err);
+    res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
