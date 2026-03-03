@@ -3,7 +3,6 @@ import { Sidebar } from './Sidebar';
 import { Bell, Coins, Settings, LogOut, CreditCard, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect } from 'react';
-import { apiClient } from '@/lib/api';
 
 interface UsageStats {
   thisMonth: number;
