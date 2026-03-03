@@ -22,7 +22,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
 
   const validateToken = (t: string): boolean => {
-    return /^r8_[A-Za-z0-9_-]{30,}$/.test(t);
+    return /^r8_\S{10,}$/.test(t);
   };
 
   const handleSaveToken = async () => {
@@ -34,7 +34,7 @@ export default function OnboardingPage() {
     }
 
     if (!validateToken(sanitizedToken)) {
-      error('El token debe empezar con "r8_" y tener al menos 33 caracteres');
+      error('El token debe empezar con "r8_"');
       return;
     }
 
@@ -213,7 +213,7 @@ export default function OnboardingPage() {
               </div>
               {token && !validateToken(token) && (
                 <p className="text-xs text-red-500">
-                  El token debe empezar con "r8_" y tener al menos 33 caracteres
+                  El token debe empezar con &quot;r8_&quot;
                 </p>
               )}
               {token && validateToken(token) && (

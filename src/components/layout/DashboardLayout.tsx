@@ -21,7 +21,7 @@ export function DashboardLayout() {
   const [hasToken, setHasToken] = useState(false);
   const [countdown, setCountdown] = useState(120);
 
-  // Verificar si el usuario tiene token configurado
+  // Verificar si el usuario tiene token configurado (solo al cambiar de usuario)
   useEffect(() => {
     if (!user) {
       setCheckingToken(false);
@@ -34,7 +34,7 @@ export function DashboardLayout() {
         setHasToken(response.hasToken);
         
         // Si no tiene token, redirigir al onboarding
-        if (!response.hasToken && location.pathname !== '/onboarding') {
+        if (!response.hasToken) {
           navigate('/onboarding', { replace: true });
         }
       } catch {
@@ -46,7 +46,28 @@ export function DashboardLayout() {
     };
     
     checkUserToken();
-  }, [user, navigate, location.pathname]);
+  }, [user, navigate]);
+
+  // Re-verificar token cuando el usuario regresa del onboarding al dashboard
+  useEffect(() => {
+    if (!user || hasToken) return;
+    if (location.pathname === '/onboarding') return;
+
+    // El usuario llegó a una ruta del dashboard pero hasToken es false:
+    // puede que acabe de guardar el token en onboarding
+    const recheck = async () => {
+      try {
+        const response = await apiClient.hasToken();
+        setHasToken(response.hasToken);
+        if (!response.hasToken) {
+          navigate('/onboarding', { replace: true });
+        }
+      } catch {
+        setHasToken(true);
+      }
+    };
+    recheck();
+  }, [location.pathname, user, hasToken, navigate]);
 
   useEffect(() => {
     if (!user) return;
@@ -125,7 +146,7 @@ export function DashboardLayout() {
   }
 
   // Si no tiene token y no está en onboarding, no renderizar nada (ya se redirigió)
-  if (!hasToken && location.pathname !== '/onboarding') {
+  if (!hasToken) {
     return null;
   }
 
