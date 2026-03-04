@@ -45,11 +45,14 @@ export default function OnboardingPage() {
       await apiClient.saveToken(sanitizedToken);
       await refreshTokenStatus(); // Actualizar el contexto
       success('¡Token guardado correctamente!');
-      setStep(3);
+      
+      // Pequeño delay para asegurar que React propagó el estado del contexto
+      setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 100);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al guardar';
       error(errorMessage);
-    } finally {
       setSaving(false);
     }
   };
