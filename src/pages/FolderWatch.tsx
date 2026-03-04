@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 export default function FolderWatchPage() {
-  const { user, hasToken, checkingToken } = useAuth();
+  const { user, hasToken, checkingToken, refreshTokenStatus } = useAuth();
   const { toasts, dismiss, success, error, info } = useToast();
   const [inputDir, setInputDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [outputDir, setOutputDir] = useState<FileSystemDirectoryHandle | null>(null);
@@ -794,6 +794,12 @@ export default function FolderWatchPage() {
               <span className="font-bold">Token requerido:</span> Configura tu token de Replicate para usar esta función.
             </p>
             <div className="flex items-center gap-3 self-start sm:self-auto">
+              <button
+                onClick={refreshTokenStatus}
+                className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap flex items-center gap-1"
+              >
+                <RefreshCw size={12} /> Reintentar
+              </button>
               <button
                 onClick={() => window.location.href = '/settings'}
                 className="text-xs font-bold text-amber-900 underline underline-offset-2 hover:text-amber-700 whitespace-nowrap"

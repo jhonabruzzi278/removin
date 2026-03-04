@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/useToast';
 import { Toast } from '@/components/ui/toast';
+import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import { 
   Key, ExternalLink, CheckCircle2, ArrowRight, 
@@ -16,6 +17,7 @@ type Step = 1 | 2 | 3;
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { toasts, dismiss, success, error } = useToast();
+  const { refreshTokenStatus } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -41,6 +43,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       await apiClient.saveToken(sanitizedToken);
+      await refreshTokenStatus(); // Actualizar el contexto
       success('¡Token guardado correctamente!');
       setStep(3);
     } catch (err) {
