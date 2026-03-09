@@ -119,22 +119,28 @@ export async function saveUserReplicateToken(uid, token) {
   const firebase = initializeFirebase();
   
   if (!firebase) {
-    console.error('❌ Firebase Admin no está inicializado');
-    return { success: false, error: 'Firebase Admin no configurado' };
+    console.error('❌ Firebase Admin no está inicializado - Verifica variables de entorno');
+    console.error('Variables requeridas: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY');
+    return { success: false, error: 'Configuración de Firebase incompleta. Contacta al administrador.' };
   }
 
   try {
     const db = firebase.database();
+    const userRef = db.ref(`users/${uid}`);
     
-    await db.ref(`users/${uid}`).update({
+    console.log(`📝 Guardando token en Firebase Realtime DB para usuario: ${uid}`);
+    
+    await userRef.update({
       replicateToken: token,
       updatedAt: Date.now()
     });
 
+    console.log(`✅ Token guardado exitosamente en Firebase para: ${uid}`);
     return { success: true, error: null };
   } catch (error) {
-    console.error('❌ Error guardando token:', error.message);
-    return { success: false, error: `Error al guardar token: ${error.message}` };
+    console.error('❌ Error guardando token en Firebase:', error.message);
+    console.error('Stack trace:', error.stack);
+    return { success: false, error: `Error al guardar en base de datos: ${error.message}` };
   }
 }
 

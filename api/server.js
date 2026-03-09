@@ -139,21 +139,31 @@ app.post('/api/user/token', tokenLimiter, authenticateUser, async (req, res) => 
   try {
     const { token } = req.body;
     
+    // Validar que el token existe
+    if (!token) {
+      console.warn('⚠️ POST /api/user/token: Token vacío recibido');
+      return res.status(400).json({ error: 'Token requerido' });
+    }
+    
     // Validar formato del token con helper de seguridad
     if (!isValidReplicateToken(token)) {
+      console.warn('⚠️ POST /api/user/token: Token con formato inválido');
       return res.status(400).json({ error: 'Token de Replicate inválido. Debe empezar con r8_ y tener al menos 33 caracteres.' });
     }
     
+    console.log(`📝 Guardando token para usuario: ${req.uid}`);
     const { success, error } = await saveUserReplicateToken(req.uid, token);
     
     if (!success) {
-      return res.status(500).json({ error: 'Error al guardar token' });
+      console.error(`❌ Error al guardar token para ${req.uid}:`, error);
+      return res.status(500).json({ error: error || 'Error al guardar token' });
     }
     
+    console.log(`✅ Token guardado exitosamente para usuario: ${req.uid}`);
     res.json({ success: true, message: 'Token guardado correctamente' });
   } catch (err) {
-    console.error('Error en POST /api/user/token:', err);
-    res.status(500).json({ error: 'Error al guardar token' });
+    console.error('❌ Error en POST /api/user/token:', err);
+    res.status(500).json({ error: `Error al guardar token: ${err.message}` });
   }
 });
 
@@ -324,6 +334,32 @@ app.post('/api/generate-image', apiLimiter, authenticateUser, async (req, res) =
     console.error('Error en generate-image:', err);
     res.status(500).json({ error: safeErrorMessage(err) });
   }
+});
+
+// ============================================
+// Middleware de manejo de errores global
+// ============================================
+app.use((err, req, res, next) => {
+  console.error('❌ Error no manejado:', err);
+  
+  // Asegurar que siempre se responda con JSON
+  res.setHeader('Content-Type', 'application/json');
+  
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Error interno del servidor';
+  
+  res.status(statusCode).json({
+    error: IS_PRODUCTION ? 'Error interno del servidor' : message,
+    ...(IS_PRODUCTION ? {} : { stack: err.stack })
+  });
+});
+
+// ============================================
+// Ruta 404 para endpoints no encontrados
+// ============================================
+app.use((req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(404).json({ error: 'Endpoint no encontrado' });
 });
 
 // ============================================

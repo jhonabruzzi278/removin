@@ -36,13 +36,16 @@ export default function OnboardingPage() {
     }
 
     if (!validateToken(sanitizedToken)) {
-      error('El token debe empezar con "r8_"');
+      error('El token debe empezar con "r8_" y tener al menos 10 caracteres');
       return;
     }
 
     setSaving(true);
     try {
-      await apiClient.saveToken(sanitizedToken);
+      console.log('💾 Guardando token de Replicate...');
+      const result = await apiClient.saveToken(sanitizedToken);
+      console.log('✅ Token guardado:', result);
+      
       await refreshTokenStatus(); // Actualizar el contexto
       success('¡Token guardado correctamente!');
       
@@ -51,7 +54,23 @@ export default function OnboardingPage() {
         navigate('/', { replace: true });
       }, 100);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error al guardar';
+      console.error('❌ Error guardando token:', err);
+      
+      let errorMessage = 'Error al guardar el token';
+      
+      if (err instanceof Error) {
+        // Mensaje más específico según el tipo de error
+        if (err.message.includes('Firebase')) {
+          errorMessage = 'Error de configuración del servidor. Contacta al administrador.';
+        } else if (err.message.includes('red') || err.message.includes('network')) {
+          errorMessage = 'Error de conexión. Verifica tu internet e intenta de nuevo.';
+        } else if (err.message.includes('inválido')) {
+          errorMessage = err.message;
+        } else {
+          errorMessage = `Error: ${err.message}`;
+        }
+      }
+      
       error(errorMessage);
       setSaving(false);
     }
