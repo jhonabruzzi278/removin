@@ -1,30 +1,12 @@
 ﻿import { useState, useEffect, useRef } from 'react';
-
-// Tipos para APIs experimentales del navegador (File System Access + FileSystemObserver)
-interface FileSystemObserverEntry {
-  type: 'appeared' | 'disappeared' | 'modified' | 'unknown';
-  changedHandle: FileSystemHandle;
-}
-interface FileSystemObserver {
-  observe(handle: FileSystemDirectoryHandle, options?: { recursive: boolean }): Promise<void>;
-  disconnect(): void;
-}
-interface FileSystemDirectoryHandleWithPermissions extends FileSystemDirectoryHandle {
-  queryPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
-  requestPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
-}
-interface WindowWithFileSystemObserver {
-  FileSystemObserver: new (callback: (records: FileSystemObserverEntry[]) => void) => FileSystemObserver;
-}
 import { Toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
-import { uploadFile, getPublicUrl, deleteFile } from '@/lib/firebase';
-import { apiClient } from '@/lib/api';
+import { useDirectoryObserver } from '@/hooks/useDirectoryObserver';
+import { useFolderWatchProcessor } from '@/hooks/useFolderWatchProcessor';
 import { availableModels, type AIModel } from '@/data/models';
 import { cn } from '@/lib/utils';
-import { get, set } from 'idb-keyval';
 import {
   Folder, Play, Pause, Trash2, CheckCircle2,
   AlertCircle, Loader2, Info, Activity, HelpCircle,
@@ -34,8 +16,20 @@ import {
 export default function FolderWatchPage() {
   const { user, hasToken, checkingToken, refreshTokenStatus } = useAuth();
   const { toasts, dismiss, success, error, info } = useToast();
-  const [inputDir, setInputDir] = useState<FileSystemDirectoryHandle | null>(null);
-  const [outputDir, setOutputDir] = useState<FileSystemDirectoryHandle | null>(null);
+  
+  // Custom hooks para separar concerns
+  const directoryObserver = useDirectoryObserver({
+    onInfo: info,
+    onError: error,
+    onSuccess: success,
+  });
+  
+  const imageProcessor = useFolderWatchProcessor({
+    onSuccess: success,
+    onError: error,
+    user,
+  });
+  
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 });
   const [trackedCount, setTrackedCount] = useState(0);
@@ -44,9 +38,8 @@ export default function FolderWatchPage() {
   const [whiteBackground, setWhiteBackground] = useState(false);
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [useObserver, setUseObserver] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(true);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const observerRef = useRef<FileSystemObserver | null>(null);
   const processedNamesRef = useRef<Set<string>>(new Set());
   const snapshotRef = useRef<Set<string>>(new Set());
   const processingQueueRef = useRef<Array<{ file?: File; handle?: FileSystemFileHandle; name: string }>>([]);
@@ -55,12 +48,23 @@ export default function FolderWatchPage() {
   const whiteBackgroundRef = useRef(whiteBackground);
   const selectedModelRef = useRef(selectedModel);
   
-  // Nuevos Refs para evitar Stale Closures en los intervalos
+  // Refs para evitar Stale Closures en los intervalos
   const scanFolderRef = useRef<(() => Promise<void>) | null>(null);
   const processQueueRefFunc = useRef<(() => Promise<void>) | null>(null);
 
   const isSupported = 'showDirectoryPicker' in window;
-  const hasObserverAPI = 'FileSystemObserver' in self;
+  
+  // Destructure para conveniencia
+  const { 
+    inputDir, 
+    outputDir, 
+    isRestoring, 
+    selectInputFolder, 
+    selectOutputFolder,
+    startObserver,
+    stopObserver,
+    resetObserverTracking,
+  } = directoryObserver;
   
   // Filtrar a 3 modelos principales: económico, estándar y premium
   const bgModels = availableModels.filter(m => 
@@ -113,95 +117,11 @@ export default function FolderWatchPage() {
     return () => clearInterval(interval);
   }, [isMonitoring, lastScanTimeMs]);
 
-  // RF-3: Restaurar carpetas guardadas desde IndexedDB al montar
-  useEffect(() => {
-    const restoreFolders = async () => {
-      try {
-        const inputHandle = await get<FileSystemDirectoryHandle>('folderwatch-input');
-        const outputHandle = await get<FileSystemDirectoryHandle>('folderwatch-output');
-        
-        if (inputHandle) {
-          // Verificar y solicitar permisos si es necesario
-          const h = inputHandle as FileSystemDirectoryHandleWithPermissions;
-          const inputPermission = await h.queryPermission({ mode: 'read' });
-          if (inputPermission === 'granted' || inputPermission === 'prompt') {
-            if (inputPermission === 'prompt') {
-              const granted = await h.requestPermission({ mode: 'read' });
-              if (granted === 'granted') {
-                setInputDir(inputHandle);
-                info('📁 Carpeta de entrada restaurada');
-              }
-            } else {
-              setInputDir(inputHandle);
-              info('📁 Carpeta de entrada restaurada');
-            }
-          }
-        }
-        
-        if (outputHandle) {
-          const h = outputHandle as FileSystemDirectoryHandleWithPermissions;
-          const outputPermission = await h.queryPermission({ mode: 'readwrite' });
-          if (outputPermission === 'granted' || outputPermission === 'prompt') {
-            if (outputPermission === 'prompt') {
-              const granted = await h.requestPermission({ mode: 'readwrite' });
-              if (granted === 'granted') {
-                setOutputDir(outputHandle);
-                info('💾 Carpeta de salida restaurada');
-              }
-            } else {
-              setOutputDir(outputHandle);
-              info('💾 Carpeta de salida restaurada');
-            }
-          }
-        }
-      } catch {
-        // No se pudieron restaurar carpetas (no existen o permisos revocados)
-      } finally {
-        setIsRestoring(false);
-      }
-    };
-    
-    if (isSupported) {
-      restoreFolders();
-    } else {
-      setIsRestoring(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- info e isSupported son valores estables que no cambian entre renders
-  }, []);
-
-  const selectInputFolder = async () => {
-    try {
-      const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-      setInputDir(dirHandle);
-      // RF-3: Guardar en IndexedDB para persistencia
-      await set('folderwatch-input', dirHandle);
-      success(`✅ Carpeta de entrada seleccionada: ${dirHandle.name}`);
-    } catch (err) {
-      if (err instanceof Error && !err.message.includes('aborted')) {
-        error('❌ Error al seleccionar carpeta de entrada');
-      }
-    }
-  };
-
   const getTimeSinceLastScan = () => {
     if (!lastScanTime) return '';
     const seconds = Math.floor((Date.now() - lastScanTime.getTime()) / 1000);
     if (seconds < 5) return 'ahora mismo';
     return `hace ${seconds}s`;
-  };
-
-  const selectOutputFolder = async () => {
-    try {
-      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      setOutputDir(dirHandle);
-      // RF-3: Guardar en IndexedDB para persistencia
-      await set('folderwatch-output', dirHandle);
-      success(`✅ Carpeta de salida seleccionada: ${dirHandle.name}`);
-    } catch (err) {
-      if (err instanceof Error && !err.message.includes('aborted')) {
-        error('❌ Error al seleccionar carpeta de salida');
-      }
-    }
   };
 
   const waitForFileReady = async (handle: FileSystemFileHandle): Promise<File> => {
@@ -226,160 +146,30 @@ export default function FolderWatchPage() {
     return prevFile;
   };
 
-  const processImage = async (file: File, fileName: string, modelVersion?: string) => {
-    const startTime = Date.now();
-    // Usar refs para obtener valores actuales (evitar stale closures)
-    const model = modelVersion || selectedModelRef.current?.version;
+  const processImage = async (file: File, fileName: string) => {
+    const model = selectedModelRef.current?.version;
     const currentWhiteBackground = whiteBackgroundRef.current;
     
-    try {
-      // Validación de archivo
-      if (!file.type.startsWith('image/')) {
-        throw new Error('El archivo no es una imagen válida');
-      }
-      
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error('El archivo excede el tamaño máximo de 10MB');
-      }
-
-      // Sanitizar nombre de archivo para evitar path traversal
-      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath = `${user?.uid}/auto/${Date.now()}_${sanitizedFileName}`;
-      
-      const { error: uploadError } = await uploadFile(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const publicUrl = await getPublicUrl(filePath);
-      
-      if (!publicUrl) {
-        throw new Error('Error al obtener la URL de la imagen');
-      }
-
-      const data = await apiClient.removeBackground(publicUrl, model);
-
-      if (!data.success || data.error) {
-        throw new Error(data.error || 'Error en el procesamiento de la imagen');
-      }
-
-      // La imagen procesada ahora está en Firebase Storage, descarga directa
-      
-      const response = await fetch(data.outputUrl, {
-        method: 'GET',
-        mode: 'cors',
-        cache: 'no-cache'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error al descargar imagen: ${response.status} ${response.statusText}`);
-      }
-      
-      let resultBlob = await response.blob();
-      
-      if (!resultBlob || resultBlob.size === 0) {
-        throw new Error('Imagen vacía recibida');
-      }
-
-      if (!outputDir) throw new Error('No output directory');
-
-      // Aplicar fondo blanco si está activado (usar ref para valor actual)
-      if (currentWhiteBackground) {
-        const tempUrl = URL.createObjectURL(resultBlob);
-        
-        try {
-          resultBlob = await new Promise<Blob>((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = () => {
-              try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                
-                if (!ctx) {
-                  reject(new Error('No se pudo obtener contexto 2D'));
-                  return;
-                }
-                
-                // Pintar fondo blanco
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                // Dibujar imagen con transparencia encima
-                ctx.drawImage(img, 0, 0);
-                
-                // Convertir a JPG con fondo blanco
-                canvas.toBlob(
-                  (blob) => {
-                    if (blob) resolve(blob);
-                    else reject(new Error('Error al crear blob'));
-                  },
-                  'image/jpeg',
-                  0.95
-                );
-              } catch (err) {
-                reject(err);
-              }
-            };
-            
-            img.onerror = () => reject(new Error('Error al cargar imagen'));
-            img.src = tempUrl;
-          });
-        } finally {
-          // Cleanup: liberar URL temporal
-          URL.revokeObjectURL(tempUrl);
-        }
-      }
-
-      // Mantener el mismo nombre, solo cambiar extensión según formato de salida
-      const outputName = fileName.replace(
-        /\.(jpg|jpeg|png|webp)$/i,
-        currentWhiteBackground ? '.jpg' : '.png'
-      );
-      const outputFile = await outputDir.getFileHandle(outputName, { create: true });
-      const writable = await outputFile.createWritable();
-      await writable.write(resultBlob);
-      await writable.close();
-
-      const processingTime = Math.round((Date.now() - startTime) / 1000);
-      success(`✅ ${fileName} procesada (${processingTime}s)`);
-      
+    if (!outputDir) {
+      error('❌ No hay carpeta de salida configurada');
+      return;
+    }
+    
+    const result = await imageProcessor.processImage({
+      file,
+      fileName,
+      outputDir,
+      whiteBackground: currentWhiteBackground,
+      modelVersion: model,
+    });
+    
+    if (result.success) {
       setStats(prev => ({
         total: prev.total + 1,
         success: prev.success + 1,
         errors: prev.errors
       }));
-
-      // Limpiar archivo temporal de Firebase Storage (solo el input que subimos)
-      try {
-        await deleteFile(filePath);
-      } catch {
-        // Error no crítico al limpiar archivo temporal
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
-      
-      // Mensaje de error amigable según el tipo
-      let userFriendlyError = errorMsg;
-      if (errorMsg.includes('REPLICATE_API_TOKEN')) {
-        userFriendlyError = 'Token de Replicate no configurado';
-      } else if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
-        userFriendlyError = 'Límite de peticiones alcanzado. Esperando 5 segundos...';
-        // Esperar 5 segundos antes de continuar
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      } else if (errorMsg.includes('storage') || errorMsg.includes('upload')) {
-        userFriendlyError = 'Error al subir imagen';
-      } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('HTTP')) {
-        userFriendlyError = `Error de conexión: ${errorMsg}`;
-      } else if (errorMsg.includes('output directory')) {
-        userFriendlyError = 'Error al guardar archivo';
-      } else if (errorMsg.includes('ERR_HTTP2') || errorMsg.includes('Failed to fetch')) {
-        userFriendlyError = 'Error de red al descargar imagen. Verifica tu conexión y las URLs de Firebase.';
-      }
-
-      error(`❌ ${fileName}: ${userFriendlyError}`);
-      
+    } else {
       setStats(prev => ({
         total: prev.total + 1,
         success: prev.success,
@@ -396,11 +186,16 @@ export default function FolderWatchPage() {
       const snapshot = new Set<string>();
       
       for await (const entry of inputDir.values()) {
-        if (entry.kind === 'file') {
-          const file = await entry.getFile();
-          if (file.type.startsWith('image/')) {
-            snapshot.add(file.name);
+        try {
+          if (entry.kind === 'file') {
+            const file = await entry.getFile();
+            if (file.type.startsWith('image/')) {
+              snapshot.add(file.name);
+            }
           }
+        } catch (fileErr) {
+          // Error al procesar este archivo específico, continuar con los demás
+          console.error('Error al procesar archivo en snapshot:', fileErr);
         }
       }
       
@@ -432,21 +227,27 @@ export default function FolderWatchPage() {
       let newFilesFound = 0;
       
       for await (const entry of inputDir.values()) {
-        if (entry.kind === 'file') {
-          const file = await entry.getFile();
-          
-          if (file.type.startsWith('image/')) {
-            const inSnapshot = snapshotRef.current.has(file.name);
-            const inProcessed = processedNamesRef.current.has(file.name);
+        // Manejo de errores por archivo individual (RF-4: previene que un archivo problemático rompa todo el escaneo)
+        try {
+          if (entry.kind === 'file') {
+            const file = await entry.getFile();
             
-            // RF-2: Solo procesar si NO está en el snapshot inicial
-            if (!inSnapshot && !inProcessed) {
-              newFilesFound++;
-              processedNamesRef.current.add(file.name);
-              setTrackedCount(processedNamesRef.current.size);
-              processingQueueRef.current.push({ handle: entry, name: file.name });
+            if (file.type.startsWith('image/')) {
+              const inSnapshot = snapshotRef.current.has(file.name);
+              const inProcessed = processedNamesRef.current.has(file.name);
+              
+              // RF-2: Solo procesar si NO está en el snapshot inicial
+              if (!inSnapshot && !inProcessed) {
+                newFilesFound++;
+                processedNamesRef.current.add(file.name);
+                setTrackedCount(processedNamesRef.current.size);
+                processingQueueRef.current.push({ handle: entry, name: file.name });
+              }
             }
           }
+        } catch (fileErr) {
+          // Error al procesar este archivo específico, continuar con los demás
+          console.error('Error al procesar archivo en scanFolder:', fileErr);
         }
       }
       
@@ -493,9 +294,10 @@ export default function FolderWatchPage() {
           console.error("Error al estabilizar archivo:", err);
         }
 
-        // Delay de seguridad entre imágenes para no saturar Replicate
+        // RF-2: Delay dinámico basado en el modelo seleccionado
         if (processingQueueRef.current.length > 0 && isMonitoringRef.current) {
-          await new Promise(resolve => setTimeout(resolve, 10000));
+          const delay = imageProcessor.getModelDelay(selectedModelRef.current);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
@@ -534,68 +336,41 @@ export default function FolderWatchPage() {
     info(`📸 Snapshot creado: ${existingCount} archivos existentes ignorados`);
     
     // RF-1: Intentar usar FileSystemObserver si está disponible
-    if (hasObserverAPI && typeof (self as unknown as WindowWithFileSystemObserver).FileSystemObserver !== 'undefined') {
-      try {
-        const Observer = (self as unknown as WindowWithFileSystemObserver).FileSystemObserver;
-        const observer = new Observer(async (records: FileSystemObserverEntry[]) => {
-          let hasNewFiles = false;
-
-          for (const record of records) {
-            
-            // RF-1: Solo reaccionar a archivos nuevos (appeared)
-            if (record.type === 'appeared' || record.type === 'modified') {
-              try {
-                // CORRECCIÓN: Usar changedHandle, no root
-                const handle = record.changedHandle;
-                if (handle && handle.kind === 'file') {
-                  const file = await (handle as FileSystemFileHandle).getFile();
-                  
-                  if (file.type.startsWith('image/') && !processedNamesRef.current.has(file.name)) {
-                    processedNamesRef.current.add(file.name);
-                    setTrackedCount(processedNamesRef.current.size);
-                    processingQueueRef.current.push({ handle: handle as FileSystemFileHandle, name: file.name });
-                    hasNewFiles = true;
-                  }
-                }
-              } catch (err) {
-                console.error('Error procesando evento del observer:', err);
-              }
-            }
-            // Si el sistema pierde eventos, el SO arroja "unknown" y debemos hacer escaneo manual
-            else if (record.type === 'unknown') {
-              if (scanFolderRef.current) scanFolderRef.current();
-            }
-          }
-
-          if (hasNewFiles && processQueueRefFunc.current) {
+    const observerResult = await startObserver(
+      (handle, name) => {
+        // Callback cuando se detecta un archivo nuevo (el hook ya deduplicó eventos rápidos del observer)
+        // Esta verificación adicional protege contra duplicados de múltiples fuentes (observer + polling)
+        if (!processedNamesRef.current.has(name)) {
+          processedNamesRef.current.add(name);
+          setTrackedCount(processedNamesRef.current.size);
+          processingQueueRef.current.push({ handle, name });
+          if (processQueueRefFunc.current) {
             processQueueRefFunc.current();
           }
-        });
-        
-        await observer.observe(inputDir, { recursive: false });
-        observerRef.current = observer;
-        setUseObserver(true);
-        info(`⚡ Observer activo + Polling de respaldo cada 10s`);
-        
-        // Polling de respaldo configurado cada 10s usando la referencia actualizada
-        intervalRef.current = setInterval(() => {
-          if (scanFolderRef.current) scanFolderRef.current();
-        }, 10000);
-        
-      } catch (err) {
-        console.error('Error al inicializar FileSystemObserver:', err);
-        // Caer al fallback
-        setUseObserver(false);
-        info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
-        
+        }
+      },
+      () => {
+        // Callback cuando hay un evento "unknown" (fallback a escaneo manual)
         if (scanFolderRef.current) scanFolderRef.current();
-        
-        intervalRef.current = setInterval(() => {
-          if (scanFolderRef.current) scanFolderRef.current();
-        }, 3000);
       }
+    );
+    
+    if (!observerResult.success) {
+      error('❌ Error al iniciar el monitoreo');
+      stopMonitoring();
+      return;
+    }
+    
+    if (observerResult.usingObserver) {
+      setUseObserver(true);
+      info(`⚡ Observer activo + Polling de respaldo cada 10s`);
+      
+      // Polling de respaldo configurado cada 10s
+      intervalRef.current = setInterval(() => {
+        if (scanFolderRef.current) scanFolderRef.current();
+      }, 10000);
     } else {
-      // RF-2: Fallback con polling optimizado
+      // Fallback con polling optimizado
       setUseObserver(false);
       info(`🚀 Monitoreo activo con ${selectedModel.name} - Escaneando cada 3 segundos`);
       
@@ -612,15 +387,8 @@ export default function FolderWatchPage() {
     isMonitoringRef.current = false;
     info('⏸️ Monitoreo detenido');
     
-    // RF-1: Desconectar FileSystemObserver si está activo
-    if (observerRef.current) {
-      try {
-        observerRef.current.disconnect();
-        observerRef.current = null;
-      } catch (err) {
-        console.error('Error al desconectar observer:', err);
-      }
-    }
+    // RF-1: Desconectar FileSystemObserver si está activo (delegado al hook)
+    stopObserver();
     
     // Limpiar intervalo si existe
     if (intervalRef.current) {
@@ -637,6 +405,7 @@ export default function FolderWatchPage() {
     snapshotRef.current.clear();
     processingQueueRef.current = [];
     setTrackedCount(0);
+    resetObserverTracking(); // Limpiar también el tracking interno del observer
     success('✅ Estadísticas reiniciadas');
   };
 
@@ -649,18 +418,9 @@ export default function FolderWatchPage() {
     scanFolder();
   };
 
-  // Cleanup al desmontar: detener monitoreo y desconectar observer
+  // Cleanup al desmontar: detener monitoreo
   useEffect(() => {
     return () => {
-      // RF-1: Desconectar FileSystemObserver
-      if (observerRef.current) {
-        try {
-          observerRef.current.disconnect();
-        } catch (err) {
-          console.error('Error al desconectar observer en cleanup:', err);
-        }
-      }
-      
       // Detener monitoreo
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
