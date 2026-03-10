@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import * as Sentry from '@sentry/node';
 import { 
   verifyAuthToken, 
   getUserReplicateToken, 
@@ -15,6 +16,25 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// ============================================
+// Sentry Error Monitoring
+// ============================================
+const SENTRY_DSN = "https://694639b5ae1656b1c5084857a1a4ce1b@o4510275775561728.ingest.us.sentry.io/4511020474630144";
+
+if (IS_PRODUCTION) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: process.env.NODE_ENV,
+    tracesSampleRate: 0.1,
+    // Filtrar errores no relevantes
+    ignoreErrors: [
+      'ECONNRESET',
+      'ETIMEDOUT',
+    ],
+  });
+  console.info('🔍 Sentry inicializado para monitoreo de errores (backend)');
+}
 
 // ============================================
 // Security Headers (Helmet)
@@ -340,7 +360,16 @@ app.post('/api/generate-image', apiLimiter, authenticateUser, async (req, res) =
 // Middleware de manejo de errores global
 // ============================================
 app.use((err, req, res, next) => {
-  console.error('❌ Error no manejado:', err);
+  // Capturar en Sentry en producción
+  if (IS_PRODUCTION && process.env.SENTRY_DSN) {
+    Sentry.captureException(err, {
+      extra: {
+        path: req.path,
+        method: req.method,
+        uid: req.uid?.slice(0, 8),
+      },
+    });
+  }
   
   // Asegurar que siempre se responda con JSON
   res.setHeader('Content-Type', 'application/json');

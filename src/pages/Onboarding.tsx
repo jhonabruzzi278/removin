@@ -42,10 +42,7 @@ export default function OnboardingPage() {
 
     setSaving(true);
     try {
-      console.log('💾 Guardando token de Replicate...');
-      const result = await apiClient.saveToken(sanitizedToken);
-      console.log('✅ Token guardado:', result);
-      
+      await apiClient.saveToken(sanitizedToken);
       await refreshTokenStatus(); // Actualizar el contexto
       success('¡Token guardado correctamente!');
       
