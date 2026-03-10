@@ -1,17 +1,18 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { Toast } from '@/components/ui/toast';
-import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
 import { useDirectoryObserver } from '@/hooks/useDirectoryObserver';
 import { useFolderWatchProcessor } from '@/hooks/useFolderWatchProcessor';
 import { availableModels, type AIModel } from '@/data/models';
-import { cn } from '@/lib/utils';
-import {
-  Folder, Play, Pause, Trash2, CheckCircle2,
-  AlertCircle, Loader2, Info, Activity, HelpCircle,
-  RefreshCw, Star, Clock, Zap
-} from 'lucide-react';
+import { FolderWatchHeader } from '@/components/folderwatch/FolderWatchHeader';
+import { FolderWatchAlerts } from '@/components/folderwatch/FolderWatchAlerts';
+import { FolderSelector } from '@/components/folderwatch/FolderSelector';
+import { ModelSelector } from '@/components/folderwatch/ModelSelector';
+import { ConfigurationWarning } from '@/components/folderwatch/ConfigurationWarning';
+import { FolderWatchControls } from '@/components/folderwatch/FolderWatchControls';
+import { FolderWatchStats } from '@/components/folderwatch/FolderWatchStats';
+import { AlertCircle } from 'lucide-react';
 
 export default function FolderWatchPage() {
   const { user, hasToken, checkingToken, refreshTokenStatus } = useAuth();
@@ -448,352 +449,86 @@ export default function FolderWatchPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto px-4 sm:px-6 pb-10">
 
-      {/* ── Header ── */}
-      <div className="pt-2">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          {/* Título */}
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-md shadow-indigo-200">
-              <Activity className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-950">Auto Monitor</h1>
-                <Tooltip content="Monitorea una carpeta y procesa automáticamente las imágenes nuevas que detecte" position="right">
-                  <button className="text-slate-400 hover:text-slate-600 transition-colors">
-                    <HelpCircle size={16} />
-                  </button>
-                </Tooltip>
-              </div>
-              <p className="text-sm font-medium text-slate-500 mt-0.5">
-                Detección automática · Procesamiento en cola · Sin intervención manual
-              </p>
-            </div>
-          </div>
+      {/* Header */}
+      <FolderWatchHeader
+        whiteBackground={whiteBackground}
+        onToggleWhiteBackground={() => setWhiteBackground(!whiteBackground)}
+      />
 
-          {/* Toggle Fondo Blanco */}
-          <div className="flex items-center gap-2.5 bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 self-start shadow-sm">
-            <div className="w-4 h-4 rounded-full border-2 border-slate-500 bg-white flex-shrink-0" />
-            <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Fondo Blanco</span>
-            <Tooltip content="Guarda las imágenes con fondo blanco (JPG) en lugar de transparente (PNG)" position="left">
-              <button className="text-slate-400 hover:text-slate-600 transition-colors">
-                <HelpCircle size={14} />
-              </button>
-            </Tooltip>
-            <button
-              role="switch"
-              aria-checked={whiteBackground}
-              onClick={() => setWhiteBackground(!whiteBackground)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
-                whiteBackground ? 'bg-indigo-600' : 'bg-slate-300'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                  whiteBackground ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Alertas de estado */}
+      <FolderWatchAlerts
+        isRestoring={isRestoring}
+        isMonitoring={isMonitoring}
+        useObserver={useObserver}
+        lastScanTime={lastScanTime}
+        scanCount={scanCount}
+        checkingToken={checkingToken}
+        hasToken={hasToken}
+        getTimeSinceLastScan={getTimeSinceLastScan}
+        onRefreshToken={refreshTokenStatus}
+      />
 
-      {/* ── Alertas de estado ── */}
-      <div className="space-y-3">
-        {/* Restaurando */}
-        {isRestoring && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-100 border-2 border-indigo-300">
-            <Loader2 className="h-4 w-4 text-indigo-700 animate-spin flex-shrink-0" />
-            <p className="text-sm font-medium text-indigo-900">
-              <span className="font-bold">Restaurando carpetas</span> guardadas anteriormente…
-            </p>
-          </div>
-        )}
-
-        {/* Monitoreo activo */}
-        {isMonitoring && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-emerald-100 border-2 border-emerald-400">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="relative flex h-3 w-3 flex-shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-600" />
-              </span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-bold text-emerald-900">Monitoreo activo</span>
-                  {useObserver ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">
-                      <Zap size={10} />Observer + Respaldo 10s
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                      <Clock size={10} />Escaneo cada 3s
-                    </span>
-                  )}
-                </div>
-                {!useObserver && lastScanTime && (
-                  <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                    Último escaneo: {getTimeSinceLastScan()} · #{scanCount}
-                  </p>
-                )}
-                {useObserver && (
-                  <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                    Detección instantánea con escaneo de respaldo cada 10 segundos
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Token no configurado */}
-        {!checkingToken && !hasToken && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-amber-100 border-2 border-amber-400">
-            <AlertCircle className="h-4 w-4 text-amber-700 flex-shrink-0" />
-            <p className="text-sm font-medium text-amber-900 flex-1">
-              <span className="font-bold">Token requerido:</span> Configura tu token de Replicate para usar esta función.
-            </p>
-            <div className="flex items-center gap-3 self-start sm:self-auto">
-              <button
-                onClick={refreshTokenStatus}
-                className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap flex items-center gap-1"
-              >
-                <RefreshCw size={12} /> Reintentar
-              </button>
-              <button
-                onClick={() => window.location.href = '/settings'}
-                className="text-xs font-bold text-amber-900 underline underline-offset-2 hover:text-amber-700 whitespace-nowrap"
-              >
-                Ir a Ajustes →
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Carpetas ── */}
+      {/* Carpetas */}
       <div className="grid sm:grid-cols-2 gap-4">
-        {/* Entrada */}
-        <div className={cn(
-          "group rounded-2xl border-2 transition-all duration-200 overflow-hidden",
-          inputDir
-            ? "border-emerald-500 bg-emerald-100"
-            : "border-dashed border-slate-300 bg-white hover:border-indigo-500 hover:bg-indigo-50",
-          isMonitoring && "pointer-events-none grayscale"
-        )}>
-          <button
-            onClick={selectInputFolder}
-            disabled={isMonitoring}
-            className="w-full p-5 text-left"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                inputDir ? "bg-emerald-500" : "bg-slate-100 group-hover:bg-indigo-200"
-              )}>
-                {inputDir
-                  ? <CheckCircle2 className="w-5 h-5 text-white" />
-                  : <Folder className="w-5 h-5 text-slate-600 group-hover:text-indigo-700" />
-                }
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-0.5">Entrada</p>
-                <p className={cn(
-                  "text-sm font-bold truncate",
-                  inputDir ? "text-emerald-900" : "text-slate-700"
-                )}>
-                  {inputDir ? inputDir.name : "Seleccionar carpeta"}
-                </p>
-              </div>
-            </div>
-            <p className={cn("text-xs font-medium", inputDir ? "text-emerald-700" : "text-slate-500")}>
-              {inputDir ? "Carpeta de origen configurada ✓" : "Imágenes nuevas aquí serán procesadas automáticamente"}
-            </p>
-          </button>
-        </div>
-
-        {/* Salida */}
-        <div className={cn(
-          "group rounded-2xl border-2 transition-all duration-200 overflow-hidden",
-          outputDir
-            ? "border-indigo-500 bg-indigo-100"
-            : "border-dashed border-slate-300 bg-white hover:border-indigo-500 hover:bg-indigo-50",
-          isMonitoring && "pointer-events-none grayscale"
-        )}>
-          <button
-            onClick={selectOutputFolder}
-            disabled={isMonitoring}
-            className="w-full p-5 text-left"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                outputDir ? "bg-indigo-600" : "bg-slate-100 group-hover:bg-indigo-200"
-              )}>
-                {outputDir
-                  ? <CheckCircle2 className="w-5 h-5 text-white" />
-                  : <Folder className="w-5 h-5 text-slate-600 group-hover:text-indigo-700" />
-                }
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-0.5">Salida</p>
-                <p className={cn(
-                  "text-sm font-bold truncate",
-                  outputDir ? "text-indigo-900" : "text-slate-700"
-                )}>
-                  {outputDir ? outputDir.name : "Seleccionar carpeta"}
-                </p>
-              </div>
-            </div>
-            <p className={cn("text-xs font-medium", outputDir ? "text-indigo-700" : "text-slate-500")}>
-              {outputDir ? "Carpeta de destino configurada ✓" : "Las imágenes procesadas se guardarán aquí"}
-            </p>
-          </button>
-        </div>
+        <FolderSelector
+          label="Entrada"
+          folder={inputDir}
+          isMonitoring={isMonitoring}
+          description="Imágenes nuevas aquí serán procesadas automáticamente"
+          selectedDescription="Carpeta de origen configurada ✓"
+          colorScheme="emerald"
+          onSelect={selectInputFolder}
+        />
+        <FolderSelector
+          label="Salida"
+          folder={outputDir}
+          isMonitoring={isMonitoring}
+          description="Las imágenes procesadas se guardarán aquí"
+          selectedDescription="Carpeta de destino configurada ✓"
+          colorScheme="indigo"
+          onSelect={selectOutputFolder}
+        />
       </div>
 
-      {/* ── Selector de Modelo ── */}
-      <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="px-5 py-4 border-b-2 border-slate-100 bg-slate-50">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-slate-900">Modelo de IA</h2>
-            <Tooltip content="Selecciona el modelo que se usará para eliminar el fondo de todas las imágenes" position="right">
-              <button className="text-slate-400 hover:text-slate-600 transition-colors">
-                <HelpCircle size={14} />
-              </button>
-            </Tooltip>
-          </div>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">Elige el equilibrio entre velocidad, calidad y costo</p>
-        </div>
+      {/* Selector de Modelo */}
+      <ModelSelector
+        models={bgModels}
+        selectedModel={selectedModel}
+        isMonitoring={isMonitoring}
+        onSelectModel={setSelectedModel}
+        getQualityLevel={getQualityLevel}
+        getPricing={getPricing}
+      />
 
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {bgModels.map((model) => {
-            const quality = getQualityLevel(model.quality);
-            const tier = quality >= 4 ? "Premium" : quality >= 3 ? "Estándar" : "Económico";
-            const tierColor = quality >= 4
-              ? "bg-violet-600 text-white"
-              : quality >= 3
-              ? "bg-blue-600 text-white"
-              : "bg-slate-600 text-white";
-            const isSelected = selectedModel?.id === model.id;
+      {/* Aviso de configuración pendiente */}
+      <ConfigurationWarning
+        hasInputDir={!!inputDir}
+        hasOutputDir={!!outputDir}
+        hasModel={!!selectedModel}
+        hasToken={hasToken}
+        checkingToken={checkingToken}
+        isMonitoring={isMonitoring}
+      />
 
-            return (
-              <button
-                key={model.id}
-                onClick={() => setSelectedModel(model)}
-                disabled={isMonitoring}
-                className={cn(
-                  "relative p-4 rounded-xl border-2 text-left transition-all duration-150 disabled:grayscale disabled:cursor-not-allowed",
-                  isSelected
-                    ? "border-indigo-600 bg-indigo-50 shadow-md shadow-indigo-100"
-                    : "border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm"
-                )}
-              >
-                {isSelected && (
-                  <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center shadow">
-                    <CheckCircle2 className="w-3 h-3 text-white" />
-                  </span>
-                )}
+      {/* Controles */}
+      <FolderWatchControls
+        isMonitoring={isMonitoring}
+        canStart={!!inputDir && !!outputDir && !!selectedModel && hasToken && !checkingToken}
+        onStart={startMonitoring}
+        onStop={stopMonitoring}
+        onForceScan={forceScan}
+        onReset={resetStats}
+      />
 
-                <div className="flex items-center gap-0.5 mb-2.5">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      size={12}
-                      className={i < quality ? "fill-amber-400 text-amber-400" : "text-slate-300 fill-slate-200"}
-                    />
-                  ))}
-                </div>
+      {/* Estadísticas */}
+      <FolderWatchStats
+        total={stats.total}
+        success={stats.success}
+        errors={stats.errors}
+        tracked={trackedCount}
+      />
 
-                <p className="text-sm font-bold text-slate-900 leading-snug mb-2 pr-5">
-                  {model.name}
-                </p>
-
-                <div className="flex items-center justify-between">
-                  <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", tierColor)}>
-                    {tier}
-                  </span>
-                  <span className="text-xs font-bold font-mono text-slate-700">{getPricing(model.costPerRun)}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Aviso de configuración pendiente ── */}
-      {(!inputDir || !outputDir || !selectedModel || (!checkingToken && !hasToken)) && !isMonitoring && (
-        <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-100 border-2 border-slate-300">
-          <Info className="h-4 w-4 text-slate-600 flex-shrink-0" />
-          <p className="text-sm font-medium text-slate-700">
-            {!inputDir || !outputDir
-              ? "Selecciona la carpeta de entrada y salida para continuar"
-              : !selectedModel
-              ? "Selecciona un modelo de IA para continuar"
-              : "Configura tu token de Replicate en Ajustes para continuar"}
-          </p>
-        </div>
-      )}
-
-      {/* ── Controles ── */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {!isMonitoring ? (
-          <button
-            onClick={startMonitoring}
-            disabled={!inputDir || !outputDir || !selectedModel || !hasToken || checkingToken}
-            className="flex-1 inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-bold tracking-wide transition-all duration-150 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            <Play className="w-4 h-4" />
-            Iniciar Monitoreo
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={stopMonitoring}
-              className="flex-1 inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-sm font-bold tracking-wide transition-all duration-150 shadow-md shadow-rose-200 hover:shadow-lg hover:shadow-rose-200 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
-            >
-              <Pause className="w-4 h-4" />
-              Detener Monitoreo
-            </button>
-            <Tooltip content="Forzar escaneo inmediato de la carpeta" position="top">
-              <button
-                onClick={forceScan}
-                className="inline-flex items-center justify-center h-12 w-12 rounded-xl border-2 border-slate-300 bg-white hover:border-indigo-600 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </Tooltip>
-          </>
-        )}
-        <Tooltip content="Reiniciar estadísticas y lista de archivos procesados" position="top">
-          <button
-            onClick={resetStats}
-            className="inline-flex items-center justify-center h-12 w-12 rounded-xl border-2 border-slate-300 bg-white hover:border-rose-500 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* ── Estadísticas ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Total", value: stats.total, color: "text-slate-950", bg: "bg-slate-100", border: "border-slate-400", icon: <Activity className="w-4 h-4 text-slate-600" /> },
-          { label: "Exitosas", value: stats.success, color: "text-emerald-900", bg: "bg-emerald-100", border: "border-emerald-500", icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" /> },
-          { label: "Errores", value: stats.errors, color: "text-rose-900", bg: "bg-rose-100", border: "border-rose-500", icon: <AlertCircle className="w-4 h-4 text-rose-600" /> },
-          { label: "Rastreados", value: trackedCount, color: "text-indigo-900", bg: "bg-indigo-100", border: "border-indigo-500", icon: <Folder className="w-4 h-4 text-indigo-600" /> },
-        ].map(({ label, value, color, bg, border, icon }) => (
-          <div key={label} className={cn("rounded-2xl border-2 p-4 flex flex-col gap-2", bg, border)}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{label}</span>
-              {icon}
-            </div>
-            <span className={cn("text-4xl font-black tracking-tight", color)}>{value}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Toasts ── */}
+      {/* Toasts */}
       <div className="fixed bottom-6 right-4 sm:right-6 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className="pointer-events-auto">
