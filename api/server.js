@@ -64,31 +64,28 @@ const tokenLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// CORS - lista blanca estricta según entorno
+// CORS - lista blanca según entorno
 const allowedOrigins = IS_PRODUCTION
   ? [
-      process.env.FRONTEND_URL || 'https://removin.vercel.app',
       'https://removin.vercel.app',
-      // Permitir subdominios de Vercel para previews
-    ]
+      process.env.FRONTEND_URL,
+    ].filter(Boolean)
   : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
-
-// Función para validar origen
-function isAllowedOrigin(origin) {
-  if (!origin) return false;
-  if (allowedOrigins.includes(origin)) return true;
-  // En producción, permitir subdominios de Vercel (para previews)
-  if (IS_PRODUCTION && origin.endsWith('.vercel.app')) return true;
-  return false;
-}
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requests sin origin (ej. Postman en dev) solo en desarrollo
-    if (!origin && !IS_PRODUCTION) return callback(null, true);
-    if (isAllowedOrigin(origin)) return callback(null, true);
-    console.warn(`⚠️ CORS bloqueado para origen: ${origin}`);
-    callback(new Error('CORS: origen no permitido'));
+    // Permitir requests sin origin (Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Verificar lista blanca
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    
+    // En producción, permitir cualquier subdominio de vercel.app
+    if (IS_PRODUCTION && origin.endsWith('.vercel.app')) return callback(null, true);
+    
+    // Rechazar con null (no error, solo no permitido)
+    console.warn(`⚠️ CORS: origen rechazado: ${origin}`);
+    return callback(null, false);
   },
   credentials: true
 }));
