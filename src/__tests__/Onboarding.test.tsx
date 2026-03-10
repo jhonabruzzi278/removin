@@ -45,7 +45,7 @@ jest.mock('@/hooks/useToast', () => ({
   }),
 }));
 
-import Onboarding from '@/pages/Onboarding';
+import Onboarding from '../pages/Onboarding';
 
 // Helper para renderizar (el BrowserRouter ya está mockeado)
 function renderOnboarding() {

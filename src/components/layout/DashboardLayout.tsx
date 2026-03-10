@@ -238,7 +238,7 @@ export function DashboardLayout() {
         {sessionWarning && (
           <div className="sticky top-14 z-30 flex items-center justify-between gap-4 px-6 py-3 bg-amber-50 border-b-2 border-amber-400">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
               <p className="text-sm font-semibold text-amber-900">
                 Tu sesión cerrará por inactividad en{' '}
                 <span className="font-black tabular-nums">{Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}</span>
