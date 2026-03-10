@@ -1,8 +1,20 @@
 import { auth } from './firebase';
 
-// En producción, la API está en el mismo dominio (Vercel)
-// En desarrollo, usa localhost:3001
-const API_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:3001');
+/**
+ * Determinar la URL de la API basándose en el hostname actual
+ * En producción (Vercel), usa paths relativos
+ * En desarrollo (localhost), usa el servidor local
+ */
+function getApiUrl(): string {
+  // Si estamos en localhost, usar el servidor de desarrollo
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  }
+  // En producción, usar paths relativos (mismo dominio en Vercel)
+  return '';
+}
+
+const API_URL = getApiUrl();
 
 // Tipos de respuesta de la API
 interface ApiResponse<T = unknown> {
