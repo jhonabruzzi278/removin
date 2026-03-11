@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { get, set } from 'idb-keyval';
 import { Toast } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,7 +14,8 @@ import { ModelSelector } from '@/components/folderwatch/ModelSelector';
 import { ConfigurationWarning } from '@/components/folderwatch/ConfigurationWarning';
 import { FolderWatchControls } from '@/components/folderwatch/FolderWatchControls';
 import { FolderWatchStats } from '@/components/folderwatch/FolderWatchStats';
-import { AlertCircle, AlertTriangle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function FolderWatchPage() {
   const { user, hasToken, checkingToken, refreshTokenStatus } = useAuth();
@@ -41,6 +43,8 @@ export default function FolderWatchPage() {
   const [whiteBackground, setWhiteBackground] = useState(false);
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [useObserver, setUseObserver] = useState(false);
+  const [wasMonitoringBefore, setWasMonitoringBefore] = useState(false);
+  const [configRestored, setConfigRestored] = useState(false);
   
   // Refs - declaradas antes del hook de visibilidad para evitar problemas de orden
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -123,6 +127,66 @@ export default function FolderWatchPage() {
 
   useEffect(() => {
     isMonitoringRef.current = isMonitoring;
+  }, [isMonitoring]);
+
+  // Restaurar configuración guardada desde IndexedDB al montar
+  useEffect(() => {
+    const restoreConfig = async () => {
+      try {
+        // Restaurar modelo seleccionado
+        const savedModelId = await get<string>('folderwatch-model');
+        if (savedModelId) {
+          const model = bgModels.find(m => m.id === savedModelId);
+          if (model) {
+            setSelectedModel(model);
+          }
+        }
+        
+        // Restaurar configuración de fondo blanco
+        const savedWhiteBg = await get<boolean>('folderwatch-whitebg');
+        if (savedWhiteBg !== undefined) {
+          setWhiteBackground(savedWhiteBg);
+        }
+        
+        // Verificar si estaba monitoreando antes (para mostrar aviso)
+        const wasMonitoring = await get<boolean>('folderwatch-was-monitoring');
+        if (wasMonitoring) {
+          setWasMonitoringBefore(true);
+          // Limpiar el flag
+          await set('folderwatch-was-monitoring', false);
+        }
+        
+        setConfigRestored(true);
+      } catch (err) {
+        console.error('Error restaurando configuración:', err);
+        setConfigRestored(true);
+      }
+    };
+    
+    restoreConfig();
+  }, []); // Solo al montar
+
+  // Guardar configuración cuando cambie
+  useEffect(() => {
+    if (!configRestored) return; // No guardar hasta que se haya restaurado
+    
+    if (selectedModel) {
+      set('folderwatch-model', selectedModel.id).catch(() => {});
+    }
+  }, [selectedModel, configRestored]);
+
+  useEffect(() => {
+    if (!configRestored) return;
+    
+    set('folderwatch-whitebg', whiteBackground).catch(() => {});
+  }, [whiteBackground, configRestored]);
+
+  // Guardar flag de "estaba monitoreando" cuando se inicia monitoreo
+  // Esto permite mostrar un aviso al recargar la página
+  useEffect(() => {
+    if (isMonitoring) {
+      set('folderwatch-was-monitoring', true).catch(() => {});
+    }
   }, [isMonitoring]);
 
   // Mantener las referencias siempre apuntando a la versión más reciente
@@ -493,6 +557,31 @@ export default function FolderWatchPage() {
         whiteBackground={whiteBackground}
         onToggleWhiteBackground={() => setWhiteBackground(!whiteBackground)}
       />
+
+      {/* Aviso de monitoreo detenido por recarga */}
+      {wasMonitoringBefore && !isMonitoring && inputDir && outputDir && selectedModel && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <RefreshCw className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-blue-800">Monitoreo detenido</p>
+              <p className="text-xs text-blue-600 mt-0.5">
+                La página fue recargada. Tu configuración se ha restaurado. ¿Deseas reiniciar el monitoreo?
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              setWasMonitoringBefore(false);
+              startMonitoring();
+            }}
+            className="shrink-0"
+          >
+            Reiniciar
+          </Button>
+        </div>
+      )}
 
       {/* Alerta de página minimizada */}
       {!pageVisibility.isVisible && isMonitoring && (

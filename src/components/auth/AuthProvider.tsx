@@ -9,13 +9,70 @@ const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const WARNING_BEFORE_MS = 2 * 60 * 1000;
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'] as const;
 
+// Clave para persistir estado del token en localStorage
+const TOKEN_CACHE_KEY = 'removin_token_status';
+const TOKEN_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutos de cache
+
+interface TokenCache {
+  hasToken: boolean;
+  uid: string;
+  timestamp: number;
+}
+
+/**
+ * Obtener estado del token desde cache local
+ */
+function getCachedTokenStatus(uid: string): boolean | null {
+  try {
+    const cached = localStorage.getItem(TOKEN_CACHE_KEY);
+    if (!cached) return null;
+    
+    const data: TokenCache = JSON.parse(cached);
+    
+    // Verificar que el cache es para este usuario y no ha expirado
+    if (data.uid !== uid) return null;
+    if (Date.now() - data.timestamp > TOKEN_CACHE_EXPIRY) return null;
+    
+    return data.hasToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Guardar estado del token en cache local
+ */
+function setCachedTokenStatus(uid: string, hasToken: boolean): void {
+  try {
+    const data: TokenCache = {
+      hasToken,
+      uid,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignorar errores de localStorage
+  }
+}
+
+/**
+ * Limpiar cache del token
+ */
+function clearTokenCache(): void {
+  try {
+    localStorage.removeItem(TOKEN_CACHE_KEY);
+  } catch {
+    // Ignorar
+  }
+}
+
 type AuthContextType = {
   user: User | null;
   loading: boolean;
   sessionWarning: boolean;
   hasToken: boolean;
   checkingToken: boolean;
-  refreshTokenStatus: () => Promise<void>;
+  refreshTokenStatus: (forceRefresh?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   extendSession: () => void;
 };
@@ -42,21 +99,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Verificar si el usuario tiene token de Replicate configurado
-  const refreshTokenStatus = useCallback(async () => {
+  // Usa cache local para respuesta inmediata, luego verifica con el servidor
+  const refreshTokenStatus = useCallback(async (forceRefresh = false) => {
     if (!user) {
       setHasToken(false);
       setCheckingToken(false);
+      clearTokenCache();
       return;
+    }
+
+    // Primero, intentar usar cache para respuesta inmediata
+    if (!forceRefresh) {
+      const cachedStatus = getCachedTokenStatus(user.uid);
+      if (cachedStatus !== null) {
+        setHasToken(cachedStatus);
+        setCheckingToken(false);
+        
+        // Verificar en segundo plano (sin bloquear UI)
+        apiClient.hasToken().then(response => {
+          setHasToken(response.hasToken);
+          setCachedTokenStatus(user.uid, response.hasToken);
+        }).catch(() => {
+          // Mantener valor del cache si hay error de red
+        });
+        return;
+      }
     }
 
     setCheckingToken(true);
     try {
       const response = await apiClient.hasToken();
       setHasToken(response.hasToken);
+      setCachedTokenStatus(user.uid, response.hasToken);
     } catch (error) {
       console.error('Error verificando token:', error);
-      // En caso de error, asumir que no tiene token para forzar onboarding
-      setHasToken(false);
+      // En caso de error, verificar cache como fallback
+      const cachedStatus = getCachedTokenStatus(user.uid);
+      if (cachedStatus !== null) {
+        setHasToken(cachedStatus);
+      } else {
+        setHasToken(false);
+      }
     } finally {
       setCheckingToken(false);
     }
@@ -129,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, refreshTokenStatus]);
 
   const signOut = async () => {
+    clearTokenCache(); // Limpiar cache del token al cerrar sesión
     if (auth) await firebaseSignOut(auth);
   };
 

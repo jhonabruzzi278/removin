@@ -43,7 +43,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       await apiClient.saveToken(sanitizedToken);
-      await refreshTokenStatus(); // Actualizar el contexto
+      await refreshTokenStatus(true); // Forzar refresh para actualizar cache
       success('¡Token guardado correctamente!');
       
       // Pequeño delay para asegurar que React propagó el estado del contexto
