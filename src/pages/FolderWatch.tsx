@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
 import { useDirectoryObserver } from '@/hooks/useDirectoryObserver';
 import { useFolderWatchProcessor } from '@/hooks/useFolderWatchProcessor';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { availableModels, type AIModel } from '@/data/models';
 import { FolderWatchHeader } from '@/components/folderwatch/FolderWatchHeader';
 import { FolderWatchAlerts } from '@/components/folderwatch/FolderWatchAlerts';
@@ -12,7 +13,7 @@ import { ModelSelector } from '@/components/folderwatch/ModelSelector';
 import { ConfigurationWarning } from '@/components/folderwatch/ConfigurationWarning';
 import { FolderWatchControls } from '@/components/folderwatch/FolderWatchControls';
 import { FolderWatchStats } from '@/components/folderwatch/FolderWatchStats';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 
 export default function FolderWatchPage() {
   const { user, hasToken, checkingToken, refreshTokenStatus } = useAuth();
@@ -29,6 +30,21 @@ export default function FolderWatchPage() {
     onSuccess: success,
     onError: error,
     user,
+  });
+  
+  // Hook para mantener el proceso activo cuando la página está minimizada
+  const pageVisibility = usePageVisibility({
+    keepAlive: true,
+    onHidden: () => {
+      if (isMonitoring) {
+        info('⚠️ Página minimizada - el proceso continúa en segundo plano');
+      }
+    },
+    onVisible: () => {
+      if (isMonitoring) {
+        info('👁️ Página activa nuevamente');
+      }
+    },
   });
   
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -330,6 +346,11 @@ export default function FolderWatchPage() {
     setIsMonitoring(true);
     isMonitoringRef.current = true;
     setScanCount(0);
+    
+    // Activar persistencia para mantener el proceso cuando la página está minimizada
+    pageVisibility.startProcessing();
+    pageVisibility.acquireLock('folderwatch-monitoring');
+    
     success('🚀 Monitoreo iniciado');
     
     // RF-2: Crear snapshot de archivos existentes
@@ -386,6 +407,11 @@ export default function FolderWatchPage() {
   const stopMonitoring = () => {
     setIsMonitoring(false);
     isMonitoringRef.current = false;
+    
+    // Desactivar persistencia
+    pageVisibility.stopProcessing();
+    pageVisibility.releaseLock();
+    
     info('⏸️ Monitoreo detenido');
     
     // RF-1: Desconectar FileSystemObserver si está activo (delegado al hook)
@@ -427,6 +453,9 @@ export default function FolderWatchPage() {
         clearInterval(intervalRef.current);
       }
       isMonitoringRef.current = false;
+      // Limpiar persistencia
+      pageVisibility.stopProcessing();
+      pageVisibility.releaseLock();
     };
   }, []);
 
@@ -454,6 +483,19 @@ export default function FolderWatchPage() {
         whiteBackground={whiteBackground}
         onToggleWhiteBackground={() => setWhiteBackground(!whiteBackground)}
       />
+
+      {/* Alerta de página minimizada */}
+      {!pageVisibility.isVisible && isMonitoring && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">Página en segundo plano</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              El proceso continúa ejecutándose. Mantén esta pestaña abierta para el mejor rendimiento.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Alertas de estado */}
       <FolderWatchAlerts
