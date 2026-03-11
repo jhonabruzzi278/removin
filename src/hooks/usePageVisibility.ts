@@ -5,6 +5,10 @@ interface UsePageVisibilityOptions {
   onVisible?: () => void;
   /** Si es true, intentará mantener el proceso activo cuando la página esté oculta */
   keepAlive?: boolean;
+  /** Callback ejecutado en cada tick del timer de background (cada 3s por defecto) */
+  onBackgroundTick?: () => void;
+  /** Intervalo del tick en ms (default: 3000) */
+  tickInterval?: number;
 }
 
 interface UsePageVisibilityReturn {
@@ -23,14 +27,135 @@ interface UsePageVisibilityReturn {
 /**
  * Hook para manejar la visibilidad de la página y mantener procesos activos
  * cuando el usuario minimiza la ventana o cambia de pestaña.
+ * 
+ * Utiliza múltiples técnicas para evitar la suspensión del navegador:
+ * 1. Web Worker - Los workers no se suspenden en segundo plano
+ * 2. Screen Wake Lock API - Previene que la pantalla se apague
+ * 3. Web Locks API - Previene cierre de pestaña
+ * 4. Audio Context silencioso - Mantiene el proceso de audio activo
  */
 export function usePageVisibility(options: UsePageVisibilityOptions = {}): UsePageVisibilityReturn {
-  const { onHidden, onVisible, keepAlive = false } = options;
+  const { 
+    onHidden, 
+    onVisible, 
+    keepAlive = false,
+    onBackgroundTick,
+    tickInterval = 3000
+  } = options;
   
   const [isVisible, setIsVisible] = useState(!document.hidden);
   const [isProcessingActive, setIsProcessingActive] = useState(false);
   const lockRef = useRef<{ release: () => void } | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const onBackgroundTickRef = useRef(onBackgroundTick);
+
+  // Mantener referencia actualizada del callback
+  useEffect(() => {
+    onBackgroundTickRef.current = onBackgroundTick;
+  }, [onBackgroundTick]);
+
+  // Inicializar Web Worker para timers en background
+  const initWorker = useCallback(() => {
+    if (workerRef.current) return;
+    
+    try {
+      // Crear worker inline usando Blob
+      const workerCode = `
+        let intervalId = null;
+        let tickCount = 0;
+        
+        self.onmessage = (event) => {
+          const { type, interval } = event.data;
+          
+          switch (type) {
+            case 'start':
+              if (intervalId) clearInterval(intervalId);
+              tickCount = 0;
+              intervalId = setInterval(() => {
+                tickCount++;
+                self.postMessage({ type: 'tick', count: tickCount });
+              }, interval || 3000);
+              self.postMessage({ type: 'started' });
+              break;
+              
+            case 'stop':
+              if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+              }
+              self.postMessage({ type: 'stopped' });
+              tickCount = 0;
+              break;
+          }
+        };
+      `;
+      
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      const workerUrl = URL.createObjectURL(blob);
+      workerRef.current = new Worker(workerUrl);
+      
+      workerRef.current.onmessage = (event) => {
+        if (event.data.type === 'tick' && onBackgroundTickRef.current) {
+          onBackgroundTickRef.current();
+        }
+      };
+      
+      // Limpiar URL del blob después de crear el worker
+      URL.revokeObjectURL(workerUrl);
+    } catch (err) {
+      console.warn('No se pudo crear Web Worker:', err);
+    }
+  }, []);
+
+  const startWorker = useCallback(() => {
+    initWorker();
+    workerRef.current?.postMessage({ type: 'start', interval: tickInterval });
+  }, [initWorker, tickInterval]);
+
+  const stopWorker = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'stop' });
+  }, []);
+
+  // Audio Context silencioso - técnica para evitar suspensión del navegador
+  // El navegador mantiene activo JavaScript mientras hay audio procesándose
+  const startSilentAudio = useCallback(() => {
+    if (audioContextRef.current) return;
+    
+    try {
+      audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      
+      // Crear un oscilador inaudible (frecuencia muy baja, volumen 0)
+      oscillatorRef.current = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
+      
+      // Volumen prácticamente 0 (inaudible pero activo)
+      gainNode.gain.value = 0.001;
+      
+      oscillatorRef.current.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+      
+      // Frecuencia muy baja (subsónica, inaudible)
+      oscillatorRef.current.frequency.value = 1;
+      oscillatorRef.current.start();
+    } catch (err) {
+      console.warn('No se pudo iniciar AudioContext:', err);
+    }
+  }, []);
+
+  const stopSilentAudio = useCallback(() => {
+    try {
+      oscillatorRef.current?.stop();
+      oscillatorRef.current?.disconnect();
+      audioContextRef.current?.close();
+    } catch {
+      // Ignorar errores al cerrar
+    }
+    oscillatorRef.current = null;
+    audioContextRef.current = null;
+  }, []);
 
   // Screen Wake Lock API - previene que la pantalla se apague
   const requestWakeLock = useCallback(async () => {
@@ -41,7 +166,6 @@ export function usePageVisibility(options: UsePageVisibilityOptions = {}): UsePa
           wakeLockRef.current = null;
         });
       } catch (err) {
-        // Wake Lock no disponible o rechazado
         console.warn('Wake Lock no disponible:', err);
       }
     }
@@ -65,13 +189,11 @@ export function usePageVisibility(options: UsePageVisibilityOptions = {}): UsePa
   const acquireLock = useCallback(async (name: string) => {
     if ('locks' in navigator && !lockRef.current) {
       try {
-        await navigator.locks.request(name, { mode: 'exclusive' }, async (lock) => {
-          if (lock) {
-            // Mantener el lock indefinidamente hasta que se llame releaseLock
-            return new Promise<void>((resolve) => {
-              lockRef.current = { release: resolve };
-            });
-          }
+        // Fire-and-forget: no esperamos la promesa
+        navigator.locks.request(name, { mode: 'exclusive' }, () => {
+          return new Promise<void>((resolve) => {
+            lockRef.current = { release: resolve };
+          });
         });
       } catch (err) {
         console.warn('Web Locks no disponible:', err);
@@ -83,14 +205,18 @@ export function usePageVisibility(options: UsePageVisibilityOptions = {}): UsePa
     setIsProcessingActive(true);
     if (keepAlive) {
       requestWakeLock();
+      startWorker();
+      startSilentAudio();
     }
-  }, [keepAlive, requestWakeLock]);
+  }, [keepAlive, requestWakeLock, startWorker, startSilentAudio]);
 
   const stopProcessing = useCallback(() => {
     setIsProcessingActive(false);
     releaseWakeLock();
     releaseLock();
-  }, [releaseWakeLock, releaseLock]);
+    stopWorker();
+    stopSilentAudio();
+  }, [releaseWakeLock, releaseLock, stopWorker, stopSilentAudio]);
 
   // Manejar cambios de visibilidad
   useEffect(() => {
@@ -118,8 +244,14 @@ export function usePageVisibility(options: UsePageVisibilityOptions = {}): UsePa
     return () => {
       releaseWakeLock();
       releaseLock();
+      stopWorker();
+      stopSilentAudio();
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
     };
-  }, [releaseWakeLock, releaseLock]);
+  }, [releaseWakeLock, releaseLock, stopWorker, stopSilentAudio]);
 
   // Advertencia antes de cerrar/recargar si hay proceso activo
   useEffect(() => {

@@ -31,22 +31,8 @@ export default function FolderWatchPage() {
     onError: error,
     user,
   });
-  
-  // Hook para mantener el proceso activo cuando la página está minimizada
-  const pageVisibility = usePageVisibility({
-    keepAlive: true,
-    onHidden: () => {
-      if (isMonitoring) {
-        info('⚠️ Página minimizada - el proceso continúa en segundo plano');
-      }
-    },
-    onVisible: () => {
-      if (isMonitoring) {
-        info('👁️ Página activa nuevamente');
-      }
-    },
-  });
-  
+
+  // Estados
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [stats, setStats] = useState({ total: 0, success: 0, errors: 0 });
   const [trackedCount, setTrackedCount] = useState(0);
@@ -56,6 +42,7 @@ export default function FolderWatchPage() {
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [useObserver, setUseObserver] = useState(false);
   
+  // Refs - declaradas antes del hook de visibilidad para evitar problemas de orden
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const processedNamesRef = useRef<Set<string>>(new Set());
   const snapshotRef = useRef<Set<string>>(new Set());
@@ -68,6 +55,29 @@ export default function FolderWatchPage() {
   // Refs para evitar Stale Closures en los intervalos
   const scanFolderRef = useRef<(() => Promise<void>) | null>(null);
   const processQueueRefFunc = useRef<(() => Promise<void>) | null>(null);
+  
+  // Hook para mantener el proceso activo cuando la página está minimizada
+  // El Worker ejecuta ticks cada 3s incluso en segundo plano
+  const pageVisibility = usePageVisibility({
+    keepAlive: true,
+    tickInterval: 3000,
+    onBackgroundTick: () => {
+      // Ejecutar scan desde el Web Worker cuando la página está en background
+      if (scanFolderRef.current && isMonitoringRef.current) {
+        scanFolderRef.current();
+      }
+    },
+    onHidden: () => {
+      if (isMonitoringRef.current) {
+        info('⚠️ Página minimizada - el Worker mantiene el proceso activo');
+      }
+    },
+    onVisible: () => {
+      if (isMonitoringRef.current) {
+        info('👁️ Página activa nuevamente');
+      }
+    },
+  });
 
   const isSupported = 'showDirectoryPicker' in window;
   
