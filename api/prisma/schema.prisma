@@ -36,6 +36,8 @@ model TemporaryUpload {
   mimeType        String
   byteSize        Int
   payload         Bytes
+  payloadIv       String
+  payloadAuthTag  String
   accessTokenHash String
   expiresAt       DateTime
   createdAt       DateTime @default(now())

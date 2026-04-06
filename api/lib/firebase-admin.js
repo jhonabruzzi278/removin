@@ -7,6 +7,8 @@ import {
   sha256,
   decryptSecret,
   encryptSecret,
+  encryptBinary,
+  decryptBinary,
 } from './crypto.js';
 
 function parseBearerToken(authHeader) {
@@ -141,6 +143,7 @@ export function parseInternalTempUrl(url) {
 export async function createTemporaryUpload({ uid, logicalPath, fileName, mimeType, payload }) {
   const uploadId = `upl_${crypto.randomUUID().replace(/-/g, '')}`;
   const { raw: accessToken, hash: accessTokenHash, expiresAt } = createTempAccessToken(uploadId, uid);
+  const encryptedPayload = encryptBinary(payload);
 
   const record = await prisma.temporaryUpload.create({
     data: {
@@ -150,7 +153,9 @@ export async function createTemporaryUpload({ uid, logicalPath, fileName, mimeTy
       fileName,
       mimeType,
       byteSize: payload.length,
-      payload,
+      payload: encryptedPayload.payload,
+      payloadIv: encryptedPayload.iv,
+      payloadAuthTag: encryptedPayload.authTag,
       accessTokenHash,
       expiresAt,
     },
@@ -191,7 +196,20 @@ export async function resolveTemporaryUploadFromInternalUrl(url, expectedUid = n
     return { upload: null, error: 'Token temporal no coincide' };
   }
 
-  return { upload: record, error: null };
+  let decryptedPayload = null;
+  try {
+    decryptedPayload = decryptBinary(record.payload, record.payloadIv, record.payloadAuthTag);
+  } catch (error) {
+    return { upload: null, error: 'No se pudo descifrar el archivo temporal' };
+  }
+
+  return {
+    upload: {
+      ...record,
+      payload: decryptedPayload,
+    },
+    error: null,
+  };
 }
 
 export async function deleteTemporaryUpload({ uploadId, uid }) {

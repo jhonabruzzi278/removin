@@ -70,6 +70,32 @@ export function decryptSecret(cipherText) {
   return decrypted.toString('utf8');
 }
 
+export function encryptBinary(buffer) {
+  const key = getTokenEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    payload: encrypted,
+    iv: iv.toString('base64url'),
+    authTag: authTag.toString('base64url'),
+  };
+}
+
+export function decryptBinary(payload, ivB64, authTagB64) {
+  if (!payload || !ivB64 || !authTagB64) {
+    throw new Error('Invalid encrypted payload format');
+  }
+
+  const key = getTokenEncryptionKey();
+  const iv = base64UrlDecode(ivB64);
+  const authTag = base64UrlDecode(authTagB64);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(payload), decipher.final()]);
+}
+
 function getTempUploadSecret() {
   return getEnvOrThrow('SESSION_SECRET');
 }
