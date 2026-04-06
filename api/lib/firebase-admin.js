@@ -1,162 +1,216 @@
-import admin from 'firebase-admin';
+﻿import crypto from 'crypto';
+import { clerkClient } from '@clerk/clerk-sdk-node';
+import { prisma } from './prisma.js';
+import {
+  createTempAccessToken,
+  parseAndVerifyTempAccessToken,
+  sha256,
+  decryptSecret,
+  encryptSecret,
+} from './crypto.js';
 
-// Inicializar Firebase Admin SDK
-let firebaseAdmin = null;
-
-/**
- * Procesar la clave privada para manejar diferentes formatos
- */
-function parsePrivateKey(key) {
-  if (!key) return null;
-  
-  // Si ya tiene saltos de línea reales, retornar tal cual
-  if (key.includes('-----BEGIN PRIVATE KEY-----\n')) {
-    return key;
-  }
-  
-  // Si tiene \n literales (como texto), reemplazarlos
-  if (key.includes('\\n')) {
-    return key.replace(/\\n/g, '\n');
-  }
-  
-  return key;
+function parseBearerToken(authHeader) {
+  if (!authHeader || typeof authHeader !== 'string') return null;
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice('Bearer '.length).trim();
+  return token || null;
 }
 
-function initializeFirebase() {
-  if (firebaseAdmin) return firebaseAdmin;
-  
-  try {
-    if (admin.apps.length > 0) {
-      firebaseAdmin = admin;
-      return firebaseAdmin;
-    }
+async function getOrCreateUserFromClerk(clerkUserId) {
+  const clerkUser = await clerkClient.users.getUser(clerkUserId);
+  const email = clerkUser.emailAddresses?.find((item) => item.id === clerkUser.primaryEmailAddressId)?.emailAddress
+    || clerkUser.emailAddresses?.[0]?.emailAddress
+    || `${clerkUserId}@clerk.local`;
 
-    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
-    const privateKey = parsePrivateKey(rawKey);
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    
-    const serviceAccount = {
-      projectId: projectId,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: privateKey
-    };
+  const name = clerkUser.fullName || clerkUser.firstName || email.split('@')[0];
+  const pictureUrl = clerkUser.imageUrl || null;
 
-    if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
-      console.warn('⚠️ Firebase Admin no configurado');
-      return null;
-    }
-
-    // Inicializar con Realtime Database URL
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: projectId,
-      databaseURL: `https://${projectId}-default-rtdb.firebaseio.com`
-    });
-
-    firebaseAdmin = admin;
-    console.log('✅ Firebase Admin inicializado con projectId:', projectId);
-    return firebaseAdmin;
-  } catch (error) {
-    console.error('❌ Error inicializando Firebase Admin:', error.message);
-    return null;
-  }
+  return prisma.user.upsert({
+    where: { clerkId: clerkUserId },
+    update: {
+      email,
+      name,
+      pictureUrl,
+    },
+    create: {
+      clerkId: clerkUserId,
+      email,
+      name,
+      pictureUrl,
+    },
+  });
 }
 
-/**
- * Verificar token de Firebase Auth y obtener UID del usuario
- */
+function mapUserForFrontend(user) {
+  return {
+    uid: user.id,
+    email: user.email,
+    displayName: user.name || user.email,
+    photoURL: user.pictureUrl || null,
+  };
+}
+
+async function verifyClerkToken(rawToken) {
+  const { verifyToken } = await import('@clerk/clerk-sdk-node');
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('CLERK_SECRET_KEY no configurado');
+  }
+
+  const result = await verifyToken(rawToken, { secretKey });
+  if (!result || !result.sub) {
+    throw new Error('Token de Clerk invalido');
+  }
+
+  return result.sub;
+}
+
 export async function verifyAuthToken(authHeader) {
-  const firebase = initializeFirebase();
-  
-  if (!firebase) {
-    return { uid: null, error: 'Firebase Admin no configurado' };
+  const rawToken = parseBearerToken(authHeader);
+  if (!rawToken) {
+    return { uid: null, error: 'Token de autenticacion requerido' };
   }
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { uid: null, error: 'Token de autenticación requerido' };
-  }
-
-  const idToken = authHeader.split('Bearer ')[1];
 
   try {
-    const decodedToken = await firebase.auth().verifyIdToken(idToken);
-    return { uid: decodedToken.uid, error: null };
+    const clerkUserId = await verifyClerkToken(rawToken);
+    const user = await getOrCreateUserFromClerk(clerkUserId);
+    return { uid: user.id, error: null, user: mapUserForFrontend(user) };
   } catch (error) {
     console.error('Error verificando token:', error.message);
-    return { uid: null, error: 'Token inválido o expirado' };
+    return { uid: null, error: 'Token invalido o expirado' };
   }
 }
 
-/**
- * Obtener token de Replicate del usuario desde Realtime Database
- */
 export async function getUserReplicateToken(uid) {
-  const firebase = initializeFirebase();
-  
-  if (!firebase) {
-    return { token: null, error: 'Firebase Admin no configurado' };
-  }
+  if (!uid) return { token: null, error: 'Usuario requerido' };
 
   try {
-    const db = firebase.database();
-    const snapshot = await db.ref(`users/${uid}/replicateToken`).get();
-    
-    if (!snapshot.exists()) {
-      return { token: null, error: null }; // Usuario sin token aún
+    const credential = await prisma.replicateCredential.findUnique({
+      where: { userId: uid },
+    });
+
+    if (!credential) {
+      return { token: null, error: null };
     }
 
-    return { token: snapshot.val(), error: null };
+    const token = decryptSecret(credential.tokenCipher);
+    return { token, error: null };
   } catch (error) {
     console.error('Error obteniendo token de usuario:', error.message);
     return { token: null, error: 'Error al obtener token' };
   }
 }
 
-/**
- * Guardar token de Replicate del usuario en Realtime Database
- */
 export async function saveUserReplicateToken(uid, token) {
-  const firebase = initializeFirebase();
-  
-  if (!firebase) {
-    console.error('❌ Firebase Admin no está inicializado - Verifica variables de entorno');
-    console.error('Variables requeridas: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY');
-    return { success: false, error: 'Configuración de Firebase incompleta. Contacta al administrador.' };
+  if (!uid || !token) {
+    return { success: false, error: 'Usuario y token requeridos' };
   }
 
   try {
-    const db = firebase.database();
-    const userRef = db.ref(`users/${uid}`);
-    
-    console.log(`📝 Guardando token en Firebase Realtime DB para usuario: ${uid}`);
-    
-    await userRef.update({
-      replicateToken: token,
-      updatedAt: Date.now()
+    const tokenCipher = encryptSecret(token);
+    await prisma.replicateCredential.upsert({
+      where: { userId: uid },
+      update: { tokenCipher },
+      create: { userId: uid, tokenCipher },
     });
 
-    console.log(`✅ Token guardado exitosamente en Firebase para: ${uid}`);
     return { success: true, error: null };
   } catch (error) {
-    console.error('❌ Error guardando token en Firebase:', error.message);
-    console.error('Stack trace:', error.stack);
-    return { success: false, error: `Error al guardar en base de datos: ${error.message}` };
+    console.error('Error guardando token cifrado:', error.message);
+    return { success: false, error: 'No fue posible guardar el token' };
   }
 }
 
-/**
- * Obtener instancia de Realtime Database para debug
- */
-export function getDb() {
-  const firebase = initializeFirebase();
-  if (!firebase) return null;
-  
+function makeInternalTempUrl(uploadId, accessToken) {
+  return `removin-temp://${uploadId}?token=${encodeURIComponent(accessToken)}`;
+}
+
+export function parseInternalTempUrl(url) {
   try {
-    return firebase.database();
-  } catch (e) {
-    console.error('Error obteniendo database:', e.message);
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'removin-temp:') return null;
+    const uploadId = parsed.hostname;
+    const token = parsed.searchParams.get('token');
+    if (!uploadId || !token) return null;
+    return { uploadId, token };
+  } catch {
     return null;
   }
 }
 
-export { initializeFirebase };
+export async function createTemporaryUpload({ uid, logicalPath, fileName, mimeType, payload }) {
+  const uploadId = `upl_${crypto.randomUUID().replace(/-/g, '')}`;
+  const { raw: accessToken, hash: accessTokenHash, expiresAt } = createTempAccessToken(uploadId, uid);
+
+  const record = await prisma.temporaryUpload.create({
+    data: {
+      id: uploadId,
+      userId: uid,
+      logicalPath,
+      fileName,
+      mimeType,
+      byteSize: payload.length,
+      payload,
+      accessTokenHash,
+      expiresAt,
+    },
+  });
+
+  return {
+    uploadId: record.id,
+    logicalPath: record.logicalPath,
+    internalUrl: makeInternalTempUrl(record.id, accessToken),
+    expiresAt: record.expiresAt.toISOString(),
+  };
+}
+
+export async function resolveTemporaryUploadFromInternalUrl(url, expectedUid = null) {
+  const parsed = parseInternalTempUrl(url);
+  if (!parsed) {
+    return { upload: null, error: 'URL temporal invalida' };
+  }
+
+  const record = await prisma.temporaryUpload.findUnique({
+    where: { id: parsed.uploadId },
+  });
+
+  if (!record) return { upload: null, error: 'Archivo temporal no encontrado' };
+  if (record.expiresAt.getTime() < Date.now()) {
+    return { upload: null, error: 'Archivo temporal expirado' };
+  }
+  if (expectedUid && record.userId !== expectedUid) {
+    return { upload: null, error: 'No autorizado para usar este archivo temporal' };
+  }
+
+  const validation = parseAndVerifyTempAccessToken(parsed.token, record.id, record.userId);
+  if (!validation.valid) {
+    return { upload: null, error: 'Token temporal invalido' };
+  }
+
+  if (sha256(parsed.token) !== record.accessTokenHash) {
+    return { upload: null, error: 'Token temporal no coincide' };
+  }
+
+  return { upload: record, error: null };
+}
+
+export async function deleteTemporaryUpload({ uploadId, uid }) {
+  if (!uploadId || !uid) return { success: false, error: 'Parametros invalidos' };
+
+  const deleted = await prisma.temporaryUpload.deleteMany({
+    where: { id: uploadId, userId: uid },
+  });
+
+  return deleted.count > 0
+    ? { success: true, error: null }
+    : { success: false, error: 'Archivo temporal no encontrado' };
+}
+
+export async function cleanupExpiredData() {
+  const now = new Date();
+  await prisma.temporaryUpload.deleteMany({ where: { expiresAt: { lt: now } } });
+}
+
+export function initializeFirebase() {
+  return null;
+}

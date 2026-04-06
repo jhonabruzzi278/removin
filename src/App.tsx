@@ -1,11 +1,10 @@
-import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+﻿import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
+import { lazy, Suspense } from 'react';
 
-// Lazy loading de todas las páginas para code splitting
 const LoginPage = lazy(() => import('@/pages/Login'));
 const OnboardingPage = lazy(() => import('@/pages/Onboarding'));
 const RemovePage = lazy(() => import('@/pages/Remove'));
@@ -16,11 +15,10 @@ const FolderWatchPage = lazy(() => import('@/pages/FolderWatch'));
 const UsagePage = lazy(() => import('@/pages/Usage'));
 const ConfigErrorPage = lazy(() => import('@/pages/ConfigError'));
 
-// Verificar si las variables de entorno están configuradas
-const isConfigured = import.meta.env.VITE_FIREBASE_API_KEY && 
-                    import.meta.env.VITE_FIREBASE_API_KEY !== 'your_firebase_api_key_here';
+const isConfigured =
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY &&
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY !== 'your_clerk_publishable_key_here';
 
-// Componente para Rutas Privadas
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
@@ -42,7 +40,6 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Componente de loading para Suspense
 function PageLoader() {
   return (
     <div className="h-screen w-full flex items-center justify-center bg-slate-50">
@@ -52,7 +49,6 @@ function PageLoader() {
 }
 
 function App() {
-  // Si no está configurado, mostrar página de error
   if (!isConfigured) {
     return (
       <BrowserRouter>
@@ -70,22 +66,25 @@ function App() {
       <BrowserRouter>
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* Ruta Pública: Login */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* Ruta Privada: Onboarding (sin sidebar) */}
-            <Route path="/onboarding" element={
-              <PrivateRoute>
-                <OnboardingPage />
-              </PrivateRoute>
-            } />
+            <Route
+              path="/onboarding"
+              element={
+                <PrivateRoute>
+                  <OnboardingPage />
+                </PrivateRoute>
+              }
+            />
 
-            {/* Rutas Privadas: Dashboard */}
-            <Route path="/" element={
-              <PrivateRoute>
-                <DashboardLayout />
-              </PrivateRoute>
-            }>
+            <Route
+              path="/"
+              element={
+                <PrivateRoute>
+                  <DashboardLayout />
+                </PrivateRoute>
+              }
+            >
               <Route index element={<RemovePage />} />
               <Route path="generate" element={<GeneratePage />} />
               <Route path="compress" element={<CompressPage />} />
@@ -94,8 +93,8 @@ function App() {
               <Route path="settings" element={<SettingsPage />} />
             </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </Suspense>
       </BrowserRouter>
     </AuthProvider>

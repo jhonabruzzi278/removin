@@ -1,8 +1,8 @@
-// Mockear firebase antes de importar api.ts
+﻿// Mockear firebase antes de importar api.ts
 jest.mock('@/lib/firebase', () => ({
   auth: {
     currentUser: {
-      getIdToken: jest.fn().mockResolvedValue('mock-firebase-token'),
+      getIdToken: jest.fn().mockResolvedValue('mock-clerk-token'),
     },
   },
   isConfigured: true,
@@ -13,11 +13,9 @@ jest.mock('@/lib/firebase', () => ({
 
 import { apiClient } from '@/lib/api';
 
-// Guardar referencia al fetch original
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
-// Helper: crear una respuesta HTTP mock
 function mockResponse(data: unknown, ok = true, status = 200) {
   return {
     ok,
@@ -35,49 +33,43 @@ beforeEach(() => {
 
 describe('ApiClient.hasToken()', () => {
   it('devuelve hasToken: true cuando el servidor responde con token', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ hasToken: true, isCustom: false })
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ hasToken: true, isCustom: true }));
     const result = await apiClient.hasToken();
     expect(result.hasToken).toBe(true);
   });
 
   it('devuelve hasToken: false cuando el servidor lo indica', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ hasToken: false, isCustom: false })
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ hasToken: false, isCustom: true }));
     const result = await apiClient.hasToken();
     expect(result.hasToken).toBe(false);
   });
 
-  it('lanza error si no hay sesión activa', async () => {
+  it('lanza error si no hay sesion activa', async () => {
     const { auth } = jest.requireMock('@/lib/firebase') as { auth: { currentUser: unknown } };
     const original = auth.currentUser;
     auth.currentUser = null;
 
-    await expect(apiClient.hasToken()).rejects.toThrow('No hay sesión activa');
+    await expect(apiClient.hasToken()).rejects.toThrow('No hay sesion activa');
     auth.currentUser = original;
   });
 
   it('incluye el header Authorization con Bearer token', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ hasToken: true, isCustom: false })
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ hasToken: true, isCustom: true }));
     await apiClient.hasToken();
     const call = mockFetch.mock.calls[0];
-    expect(call[1].headers['Authorization']).toBe('Bearer mock-firebase-token');
+    expect(call[1].headers['Authorization']).toBe('Bearer mock-clerk-token');
   });
 });
 
 describe('ApiClient.saveToken()', () => {
-  it('envía el token en el body de la petición', async () => {
+  it('envia el token en el body de la peticion', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ success: true }));
     await apiClient.saveToken('r8_abc123def456');
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.token).toBe('r8_abc123def456');
   });
 
-  it('usa método POST', async () => {
+  it('usa metodo POST', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ success: true }));
     await apiClient.saveToken('r8_test');
     expect(mockFetch.mock.calls[0][1].method).toBe('POST');
@@ -85,14 +77,11 @@ describe('ApiClient.saveToken()', () => {
 });
 
 describe('ApiClient.removeBackground()', () => {
-  it('envía imageUrl y modelVersion al endpoint', async () => {
+  it('envia imageUrl y modelVersion al endpoint', async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({ success: true, outputUrl: 'https://example.com/out.png' })
     );
-    const result = await apiClient.removeBackground(
-      'https://storage.googleapis.com/test.jpg',
-      'fb8af171'
-    );
+    const result = await apiClient.removeBackground('https://storage.googleapis.com/test.jpg', 'fb8af171');
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.imageUrl).toBe('https://storage.googleapis.com/test.jpg');
     expect(body.modelVersion).toBe('fb8af171');
@@ -100,17 +89,13 @@ describe('ApiClient.removeBackground()', () => {
   });
 
   it('lanza error cuando el servidor responde con error HTTP', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ error: 'Token inválido' }, false, 401)
-    );
-    await expect(
-      apiClient.removeBackground('https://x.com/img.jpg')
-    ).rejects.toThrow('Token inválido');
+    mockFetch.mockResolvedValueOnce(mockResponse({ error: 'Token invalido' }, false, 401));
+    await expect(apiClient.removeBackground('https://x.com/img.jpg')).rejects.toThrow('Token invalido');
   });
 });
 
 describe('ApiClient.generateImage()', () => {
-  it('envía el prompt y opciones al endpoint', async () => {
+  it('envia el prompt y opciones al endpoint', async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({ success: true, outputUrl: 'https://example.com/gen.png' })
     );
@@ -130,25 +115,20 @@ describe('ApiClient.generateImage()', () => {
       status: 500,
       headers: { get: () => 'text/html' },
     });
-    await expect(apiClient.generateImage('test')).rejects.toThrow(
-      'Respuesta inválida del servidor'
-    );
+    await expect(apiClient.generateImage('test')).rejects.toThrow('Respuesta invalida del servidor');
   });
 });
 
 describe('ApiClient - reintentos y red', () => {
-  it('reintenta automáticamente en error de red (TypeError)', async () => {
-    // Simular que setTimeout resuelve inmediatamente para no esperar 5 segundos
-    jest
-      .spyOn(global, 'setTimeout')
-      .mockImplementation((fn: (...args: unknown[]) => void) => {
-        fn();
-        return null as unknown as NodeJS.Timeout;
-      });
+  it('reintenta automaticamente en error de red (TypeError)', async () => {
+    jest.spyOn(global, 'setTimeout').mockImplementation((fn: (...args: unknown[]) => void) => {
+      fn();
+      return null as unknown as NodeJS.Timeout;
+    });
 
     mockFetch
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(mockResponse({ hasToken: true, isCustom: false }));
+      .mockResolvedValueOnce(mockResponse({ hasToken: true, isCustom: true }));
 
     const result = await apiClient.hasToken();
     expect(mockFetch).toHaveBeenCalledTimes(2);

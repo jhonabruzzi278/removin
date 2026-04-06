@@ -1,0 +1,46 @@
+﻿generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String                @id @default(cuid())
+  clerkId             String                @unique
+  email               String                @unique
+  name                String?
+  pictureUrl          String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  replicateCredential ReplicateCredential?
+  temporaryUploads    TemporaryUpload[]
+}
+
+model ReplicateCredential {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  tokenCipher String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TemporaryUpload {
+  id              String   @id @default(cuid())
+  userId          String
+  logicalPath     String
+  fileName        String
+  mimeType        String
+  byteSize        Int
+  payload         Bytes
+  accessTokenHash String
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}

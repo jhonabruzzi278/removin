@@ -1,26 +1,22 @@
-import { auth } from './firebase';
+﻿import { auth, type AppUser } from './firebase';
 
 /**
- * Determinar la URL de la API basándose en el hostname actual
- * En producción (Vercel), usa paths relativos
- * En desarrollo (localhost), usa el servidor local
+ * Resolve API base URL depending on runtime host.
  */
 function getApiUrl(): string {
-  // Si estamos en localhost, usar el servidor de desarrollo
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return import.meta.env.VITE_API_URL || 'http://localhost:3001';
   }
-  // En producción, usar paths relativos (mismo dominio en Vercel)
   return '';
 }
 
 const API_URL = getApiUrl();
 
-// Tipos de respuesta de la API
 interface ApiResponse<T = unknown> {
   success?: boolean;
   error?: string;
   data?: T;
+  retryAfter?: number;
 }
 
 export interface TokenResponse {
@@ -40,109 +36,123 @@ export interface GenerateImageResponse {
   error?: string;
 }
 
-/**
- * Cliente HTTP para comunicarse con el backend
- */
+export interface GoogleAuthResponse {
+  success: boolean;
+  token: string;
+  expiresAt: string;
+  user: AppUser;
+  error?: string;
+}
+
+export interface CurrentUserResponse {
+  success: boolean;
+  user: AppUser;
+}
+
 class ApiClient {
-  /**
-   * Obtener headers con autenticación
-   */
   async getHeaders() {
     if (!auth || !auth.currentUser) {
-      throw new Error('No hay sesión activa');
+      throw new Error('No hay sesion activa');
     }
-    
+
     const token = await auth.currentUser.getIdToken();
-    
+
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
     };
   }
 
-  /**
-   * Hacer request al backend con retry automático en caso de 429
-   */
-  async request<T = unknown>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T> {
-    const headers = await this.getHeaders();
-    
+  async request<T = unknown>(
+    endpoint: string,
+    options: RequestInit = {},
+    retries = 2,
+    requiresAuth = true
+  ): Promise<T> {
+    const headers = requiresAuth
+      ? await this.getHeaders()
+      : {
+          'Content-Type': 'application/json',
+        };
+
     try {
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers: {
           ...headers,
-          ...(options.headers || {})
-        }
+          ...(options.headers || {}),
+        },
       });
-      
-      // Validar que la respuesta tenga contenido
+
       const contentType = response.headers.get('content-type');
       if (!contentType?.includes('application/json')) {
-        throw new Error('Respuesta inválida del servidor');
+        throw new Error('Respuesta invalida del servidor');
       }
-      
-      const data = await response.json() as ApiResponse<T> & T;
-      
-      // Si es error 429 y tenemos retries, esperar y reintentar
+
+      const data = (await response.json()) as ApiResponse<T> & T;
+
       if (response.status === 429 && retries > 0) {
-        const retryAfter = (data as { retryAfter?: number }).retryAfter || 15;
-        // Rate limit alcanzado, reintentando...
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        return this.request<T>(endpoint, options, retries - 1);
+        const retryAfter = data.retryAfter || 15;
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        return this.request<T>(endpoint, options, retries - 1, requiresAuth);
       }
-      
+
       if (!response.ok) {
         throw new Error(data.error || `HTTP ${response.status}`);
       }
-      
+
       return data as T;
     } catch (error) {
-      // Si es error de red y tenemos retries
       if (retries > 0 && error instanceof TypeError) {
-        // Error de red, reintentando...
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        return this.request<T>(endpoint, options, retries - 1);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        return this.request<T>(endpoint, options, retries - 1, requiresAuth);
       }
       throw error;
     }
   }
 
-  // ==========================================
-  // Métodos de API
-  // ==========================================
+  async googleSignIn(idToken: string): Promise<GoogleAuthResponse> {
+    return this.request<GoogleAuthResponse>(
+      '/api/auth/google',
+      {
+        method: 'POST',
+        body: JSON.stringify({ idToken }),
+      },
+      0,
+      false
+    );
+  }
 
-  /**
-   * Verificar si el usuario tiene token configurado
-   */
+  async getCurrentUser(): Promise<CurrentUserResponse> {
+    return this.request<CurrentUserResponse>('/api/auth/me');
+  }
+
+  async logout(): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>('/api/auth/logout', {
+      method: 'POST',
+    });
+  }
+
   async hasToken(): Promise<TokenResponse> {
     return this.request<TokenResponse>('/api/user/token');
   }
 
-  /**
-   * Guardar token de Replicate
-   */
   async saveToken(token: string): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/api/user/token', {
       method: 'POST',
-      body: JSON.stringify({ token })
+      body: JSON.stringify({ token }),
     });
   }
 
-  /**
-   * Remover fondo de imagen
-   */
   async removeBackground(imageUrl: string, modelVersion?: string): Promise<RemoveBackgroundResponse> {
     return this.request<RemoveBackgroundResponse>('/api/remove-bg', {
       method: 'POST',
-      body: JSON.stringify({ imageUrl, modelVersion })
+      body: JSON.stringify({ imageUrl, modelVersion }),
     });
   }
 
-  /**
-   * Generar imagen con AI
-   */
   async generateImage(
-    prompt: string, 
+    prompt: string,
     negativePrompt?: string,
     options?: {
       width?: number;
@@ -155,11 +165,11 @@ class ApiClient {
   ): Promise<GenerateImageResponse> {
     return this.request<GenerateImageResponse>('/api/generate-image', {
       method: 'POST',
-      body: JSON.stringify({ 
-        prompt, 
+      body: JSON.stringify({
+        prompt,
         negative_prompt: negativePrompt,
-        ...options
-      })
+        ...options,
+      }),
     });
   }
 }

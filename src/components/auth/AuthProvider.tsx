@@ -1,17 +1,14 @@
+﻿import { useAuth as useClerkAuth, useUser } from '@clerk/react';
 import { createContext, useCallback, useEffect, useRef, useState } from 'react';
-import { type User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth, isConfigured } from '@/lib/firebase';
 import { apiClient } from '@/lib/api';
+import { auth, setCurrentUser, setTokenProvider, clearAuthSession } from '@/lib/firebase';
 
-// 30 minutos de inactividad → cierre de sesión automático
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
-// Aviso 2 minutos antes del cierre
 const WARNING_BEFORE_MS = 2 * 60 * 1000;
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'] as const;
 
-// Clave para persistir estado del token en localStorage
 const TOKEN_CACHE_KEY = 'removin_token_status';
-const TOKEN_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutos de cache
+const TOKEN_CACHE_EXPIRY = 5 * 60 * 1000;
 
 interface TokenCache {
   hasToken: boolean;
@@ -19,55 +16,44 @@ interface TokenCache {
   timestamp: number;
 }
 
-/**
- * Obtener estado del token desde cache local
- */
 function getCachedTokenStatus(uid: string): boolean | null {
   try {
     const cached = localStorage.getItem(TOKEN_CACHE_KEY);
     if (!cached) return null;
-    
+
     const data: TokenCache = JSON.parse(cached);
-    
-    // Verificar que el cache es para este usuario y no ha expirado
     if (data.uid !== uid) return null;
     if (Date.now() - data.timestamp > TOKEN_CACHE_EXPIRY) return null;
-    
+
     return data.hasToken;
   } catch {
     return null;
   }
 }
 
-/**
- * Guardar estado del token en cache local
- */
 function setCachedTokenStatus(uid: string, hasToken: boolean): void {
   try {
     const data: TokenCache = {
       hasToken,
       uid,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(data));
   } catch {
-    // Ignorar errores de localStorage
+    // ignore
   }
 }
 
-/**
- * Limpiar cache del token
- */
 function clearTokenCache(): void {
   try {
     localStorage.removeItem(TOKEN_CACHE_KEY);
   } catch {
-    // Ignorar
+    // ignore
   }
 }
 
 type AuthContextType = {
-  user: User | null;
+  user: { uid: string; email: string; displayName: string; photoURL: string | null } | null;
   loading: boolean;
   sessionWarning: boolean;
   hasToken: boolean;
@@ -77,9 +63,9 @@ type AuthContextType = {
   extendSession: () => void;
 };
 
-const AuthContext = createContext<AuthContextType>({ 
-  user: null, 
-  loading: true, 
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
   sessionWarning: false,
   hasToken: false,
   checkingToken: true,
@@ -89,8 +75,11 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(!isConfigured || !auth ? false : true);
+  const { user: clerkUser, isLoaded } = useUser();
+  const { signOut: clerkSignOut, getToken } = useClerkAuth();
+
+  const [user, setUser] = useState<AuthContextType['user']>(null);
+  const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState(false);
   const [hasToken, setHasToken] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
@@ -98,52 +87,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Verificar si el usuario tiene token de Replicate configurado
-  // Usa cache local para respuesta inmediata, luego verifica con el servidor
-  const refreshTokenStatus = useCallback(async (forceRefresh = false) => {
-    if (!user) {
-      setHasToken(false);
-      setCheckingToken(false);
-      clearTokenCache();
+  useEffect(() => {
+    setTokenProvider(async () => {
+      const token = await getToken({ template: undefined });
+      return token || null;
+    });
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!isLoaded) {
+      setLoading(true);
       return;
     }
 
-    // Primero, intentar usar cache para respuesta inmediata
-    if (!forceRefresh) {
-      const cachedStatus = getCachedTokenStatus(user.uid);
-      if (cachedStatus !== null) {
-        setHasToken(cachedStatus);
-        setCheckingToken(false);
-        
-        // Verificar en segundo plano (sin bloquear UI)
-        apiClient.hasToken().then(response => {
-          setHasToken(response.hasToken);
-          setCachedTokenStatus(user.uid, response.hasToken);
-        }).catch(() => {
-          // Mantener valor del cache si hay error de red
-        });
-        return;
-      }
+    if (!clerkUser) {
+      setUser(null);
+      setLoading(false);
+      setCurrentUser(null);
+      clearAuthSession();
+      return;
     }
 
-    setCheckingToken(true);
-    try {
-      const response = await apiClient.hasToken();
-      setHasToken(response.hasToken);
-      setCachedTokenStatus(user.uid, response.hasToken);
-    } catch (error) {
-      console.error('Error verificando token:', error);
-      // En caso de error, verificar cache como fallback
-      const cachedStatus = getCachedTokenStatus(user.uid);
-      if (cachedStatus !== null) {
-        setHasToken(cachedStatus);
-      } else {
+    const mapped = {
+      uid: clerkUser.id,
+      email:
+        clerkUser.primaryEmailAddress?.emailAddress ||
+        clerkUser.emailAddresses[0]?.emailAddress ||
+        'user@removin.app',
+      displayName: clerkUser.fullName || clerkUser.firstName || 'Usuario',
+      photoURL: clerkUser.imageUrl || null,
+    };
+
+    setUser(mapped);
+    setCurrentUser(mapped);
+    setLoading(false);
+  }, [clerkUser, isLoaded]);
+
+  const refreshTokenStatus = useCallback(
+    async (forceRefresh = false) => {
+      if (!user) {
         setHasToken(false);
+        setCheckingToken(false);
+        clearTokenCache();
+        return;
       }
-    } finally {
-      setCheckingToken(false);
-    }
-  }, [user]);
+
+      if (!forceRefresh) {
+        const cachedStatus = getCachedTokenStatus(user.uid);
+        if (cachedStatus !== null) {
+          setHasToken(cachedStatus);
+          setCheckingToken(false);
+
+          apiClient
+            .hasToken()
+            .then((response) => {
+              setHasToken(response.hasToken);
+              setCachedTokenStatus(user.uid, response.hasToken);
+            })
+            .catch(() => {
+              // keep cache value
+            });
+          return;
+        }
+      }
+
+      setCheckingToken(true);
+      try {
+        const response = await apiClient.hasToken();
+        setHasToken(response.hasToken);
+        setCachedTokenStatus(user.uid, response.hasToken);
+      } catch (error) {
+        console.error('Error verificando token:', error);
+        const cachedStatus = getCachedTokenStatus(user.uid);
+        if (cachedStatus !== null) {
+          setHasToken(cachedStatus);
+        } else {
+          setHasToken(false);
+        }
+      } finally {
+        setCheckingToken(false);
+      }
+    },
+    [user]
+  );
 
   const clearTimers = useCallback(() => {
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
@@ -152,55 +178,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetTimers = useCallback(() => {
-    clearTimers(); // clearTimers ya llama setSessionWarning(false)
+    clearTimers();
 
     warningTimerRef.current = setTimeout(() => {
       setSessionWarning(true);
     }, INACTIVITY_LIMIT_MS - WARNING_BEFORE_MS);
 
     logoutTimerRef.current = setTimeout(async () => {
-      if (auth) await firebaseSignOut(auth);
+      if (auth.currentUser) {
+        await clerkSignOut();
+      }
     }, INACTIVITY_LIMIT_MS);
-  }, [clearTimers]);
+  }, [clearTimers, clerkSignOut]);
 
-  // Iniciar/detener listeners de actividad según si hay usuario logueado
   useEffect(() => {
     if (!user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      clearTimers(); // clearTimers resetea sessionWarning internamente
+      clearTimers();
       return;
     }
 
     resetTimers();
 
-    ACTIVITY_EVENTS.forEach(evt => window.addEventListener(evt, resetTimers, { passive: true }));
+    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, resetTimers, { passive: true }));
 
     return () => {
-      ACTIVITY_EVENTS.forEach(evt => window.removeEventListener(evt, resetTimers));
+      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, resetTimers));
       clearTimers();
     };
   }, [user, resetTimers, clearTimers]);
 
   useEffect(() => {
-    if (!isConfigured || !auth) return; // loading ya inicializa en false cuando !isConfigured
-
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error de autenticación:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Verificar token cuando el usuario cambia (login/logout)
-  useEffect(() => {
     refreshTokenStatus();
   }, [refreshTokenStatus]);
 
-  // Re-verificar token cuando la ventana recupera el foco (usuario volvió de Settings)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && user) {
@@ -212,26 +222,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, refreshTokenStatus]);
 
   const signOut = async () => {
-    clearTokenCache(); // Limpiar cache del token al cerrar sesión
-    if (auth) await firebaseSignOut(auth);
+    clearTokenCache();
+    await clerkSignOut();
   };
 
-  // Extiende la sesión desde el banner de advertencia
   const extendSession = useCallback(() => {
     resetTimers();
   }, [resetTimers]);
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      loading, 
-      sessionWarning, 
-      hasToken, 
-      checkingToken,
-      refreshTokenStatus,
-      signOut, 
-      extendSession 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        sessionWarning,
+        hasToken,
+        checkingToken,
+        refreshTokenStatus,
+        signOut,
+        extendSession,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

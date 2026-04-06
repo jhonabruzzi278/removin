@@ -1,5 +1,5 @@
-/**
- * Tests de integración para la página de Onboarding
+﻿/**
+ * Tests de integraciÃ³n para la pÃ¡gina de Onboarding
  * Prueba el flujo de guardado de token de Replicate
  */
 
@@ -47,18 +47,18 @@ jest.mock('@/hooks/useToast', () => ({
 
 import Onboarding from '../pages/Onboarding';
 
-// Helper para renderizar (el BrowserRouter ya está mockeado)
+// Helper para renderizar (el BrowserRouter ya estÃ¡ mockeado)
 function renderOnboarding() {
   return render(<Onboarding />);
 }
 
-// Helper para navegar al paso 2 (donde está el input del token)
+// Helper para navegar al paso 2 (donde estÃ¡ el input del token)
 async function goToTokenStep(user: ReturnType<typeof userEvent.setup>) {
-  const startButton = screen.getByRole('button', { name: /comenzar|configuración/i });
+  const startButton = screen.getByRole('button', { name: /comenzar|configuraciÃ³n/i });
   await user.click(startButton);
 }
 
-describe('Página Onboarding', () => {
+describe('PÃ¡gina Onboarding', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -70,10 +70,10 @@ describe('Página Onboarding', () => {
       expect(screen.getByText(/bienvenido/i)).toBeInTheDocument();
     });
 
-    it('tiene botón para comenzar configuración', () => {
+    it('tiene botÃ³n para comenzar configuraciÃ³n', () => {
       renderOnboarding();
       
-      const button = screen.getByRole('button', { name: /comenzar|configuración/i });
+      const button = screen.getByRole('button', { name: /comenzar|configuraciÃ³n/i });
       expect(button).toBeInTheDocument();
     });
   });
@@ -98,7 +98,7 @@ describe('Página Onboarding', () => {
       expect(input).toBeInTheDocument();
     });
 
-    it('botón de guardar está deshabilitado inicialmente', async () => {
+    it('botÃ³n de guardar estÃ¡ deshabilitado inicialmente', async () => {
       const user = userEvent.setup();
       renderOnboarding();
       
@@ -109,15 +109,15 @@ describe('Página Onboarding', () => {
     });
   });
 
-  describe('Validación del token', () => {
-    it('acepta token con formato válido (r8_xxxxxxxxxx)', async () => {
+  describe('ValidaciÃ³n del token', () => {
+    it('acepta token con formato vÃ¡lido (r8_validtoken1234567890validtoken1234)', async () => {
       const user = userEvent.setup();
       renderOnboarding();
       
       await goToTokenStep(user);
       
       const input = screen.getByPlaceholderText(/r8_/i);
-      await user.type(input, 'r8_abcdefghij1234567890');
+      await user.type(input, 'r8_validtoken1234567890validtoken1234');
       
       const saveButton = screen.getByRole('button', { name: /guardar|verificar|continuar/i });
       expect(saveButton).not.toBeDisabled();
@@ -151,7 +151,7 @@ describe('Página Onboarding', () => {
   });
 
   describe('Guardado del token', () => {
-    it('guarda token válido correctamente', async () => {
+    it('guarda token vÃ¡lido correctamente', async () => {
       const user = userEvent.setup();
       mockSaveToken.mockResolvedValue({ success: true });
       mockRefreshTokenStatus.mockResolvedValue(undefined);
@@ -161,13 +161,13 @@ describe('Página Onboarding', () => {
       await goToTokenStep(user);
       
       const input = screen.getByPlaceholderText(/r8_/i);
-      await user.type(input, 'r8_validtokentest12345');
+      await user.type(input, 'r8_validtoken1234567890validtoken1234');
       
       const saveButton = screen.getByRole('button', { name: /guardar|verificar|continuar/i });
       await user.click(saveButton);
       
       await waitFor(() => {
-        expect(mockSaveToken).toHaveBeenCalledWith('r8_validtokentest12345');
+        expect(mockSaveToken).toHaveBeenCalledWith('r8_validtoken1234567890validtoken1234');
       });
     });
 
@@ -182,16 +182,16 @@ describe('Página Onboarding', () => {
       await goToTokenStep(user);
       
       const input = screen.getByPlaceholderText(/r8_/i);
-      await user.type(input, 'r8_validtokentest12345');
+      await user.type(input, 'r8_validtoken1234567890validtoken1234');
       
       const saveButton = screen.getByRole('button', { name: /guardar|verificar|continuar/i });
       await user.click(saveButton);
       
-      // Verificar que el botón está deshabilitado durante el guardado
+      // Verificar que el botÃ³n estÃ¡ deshabilitado durante el guardado
       expect(saveButton).toBeDisabled();
     });
 
-    it('refresca el estado del token después de guardar', async () => {
+    it('refresca el estado del token despuÃ©s de guardar', async () => {
       const user = userEvent.setup();
       mockSaveToken.mockResolvedValue({ success: true });
       mockRefreshTokenStatus.mockResolvedValue(undefined);
@@ -201,7 +201,7 @@ describe('Página Onboarding', () => {
       await goToTokenStep(user);
       
       const input = screen.getByPlaceholderText(/r8_/i);
-      await user.type(input, 'r8_validtokentest12345');
+      await user.type(input, 'r8_validtoken1234567890validtoken1234');
       
       const saveButton = screen.getByRole('button', { name: /guardar|verificar|continuar/i });
       await user.click(saveButton);
@@ -222,18 +222,18 @@ describe('Página Onboarding', () => {
       await goToTokenStep(user);
       
       const input = screen.getByPlaceholderText(/r8_/i);
-      await user.type(input, 'r8_validtokentest12345');
+      await user.type(input, 'r8_validtoken1234567890validtoken1234');
       
       const saveButton = screen.getByRole('button', { name: /guardar|verificar|continuar/i });
       await user.click(saveButton);
       
-      // El error se muestra como toast - verificamos que el input sigue disponible (no navegó)
+      // El error se muestra como toast - verificamos que el input sigue disponible (no navegÃ³)
       await waitFor(() => {
         expect(screen.getByPlaceholderText(/r8_/i)).toBeInTheDocument();
       });
     });
 
-    it('permite reintentar después de un error', async () => {
+    it('permite reintentar despuÃ©s de un error', async () => {
       const user = userEvent.setup();
       mockSaveToken
         .mockRejectedValueOnce(new Error('Network error'))
@@ -245,7 +245,7 @@ describe('Página Onboarding', () => {
       await goToTokenStep(user);
       
       const input = screen.getByPlaceholderText(/r8_/i);
-      await user.type(input, 'r8_validtokentest12345');
+      await user.type(input, 'r8_validtoken1234567890validtoken1234');
       
       const saveButton = screen.getByRole('button', { name: /guardar|verificar|continuar/i });
       
@@ -256,7 +256,7 @@ describe('Página Onboarding', () => {
         expect(mockSaveToken).toHaveBeenCalledTimes(1);
       });
       
-      // Segundo intento - éxito
+      // Segundo intento - Ã©xito
       await user.click(saveButton);
       
       await waitFor(() => {
@@ -277,3 +277,6 @@ describe('Página Onboarding', () => {
     });
   });
 });
+
+
+

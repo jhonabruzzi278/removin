@@ -1,5 +1,5 @@
-/**
- * Tests de integración para endpoints críticos de la API
+﻿/**
+ * Tests de integraciÃ³n para endpoints crÃ­ticos de la API
  * Usa supertest para hacer requests HTTP reales al servidor Express
  */
 
@@ -13,7 +13,6 @@ jest.mock('../lib/firebase-admin.js', () => ({
 }));
 
 // Mock de node-fetch para Replicate API
-jest.mock('node-fetch', () => jest.fn());
 
 import request from 'supertest';
 import {
@@ -21,14 +20,16 @@ import {
   getUserReplicateToken,
   saveUserReplicateToken,
 } from '../lib/firebase-admin.js';
-import fetch from 'node-fetch';
+const fetch = jest.fn();
+
+global.fetch = fetch;
 
 // Crear app Express para testing (sin escuchar en puerto)
 function createTestApp() {
   const app = express();
   app.use(express.json({ limit: '10kb' }));
 
-  // Middleware de autenticación mock
+  // Middleware de autenticaciÃ³n mock
   async function authenticateUser(req, res, next) {
     const authHeader = req.headers.authorization;
     const { uid, error } = await verifyAuthToken(authHeader);
@@ -67,8 +68,8 @@ function createTestApp() {
       }
       
       // Validar formato del token
-      if (typeof token !== 'string' || !token.startsWith('r8_') || token.length < 13) {
-        return res.status(400).json({ error: 'Token de Replicate inválido' });
+      if (typeof token !== 'string' || !token.startsWith('r8_') || token.length < 33) {
+        return res.status(400).json({ error: 'Token de Replicate invÃ¡lido' });
       }
       
       const { success, error } = await saveUserReplicateToken(req.uid, token);
@@ -121,7 +122,7 @@ function createTestApp() {
       
       if (!response.ok) {
         if (response.status === 401) {
-          return res.status(400).json({ error: 'Token inválido', code: 'INVALID_TOKEN' });
+          return res.status(400).json({ error: 'Token invÃ¡lido', code: 'INVALID_TOKEN' });
         }
         return res.status(response.status).json({ error: 'Error al procesar imagen' });
       }
@@ -129,7 +130,7 @@ function createTestApp() {
       const result = await response.json();
       
       if (!result.output) {
-        return res.status(500).json({ error: 'No se generó imagen de salida' });
+        return res.status(500).json({ error: 'No se generÃ³ imagen de salida' });
       }
       
       res.json({ success: true, outputUrl: result.output });
@@ -148,7 +149,7 @@ function createTestApp() {
       }
       
       if (prompt.length > 1000) {
-        return res.status(400).json({ error: 'Prompt demasiado largo (máx 1000 caracteres)' });
+        return res.status(400).json({ error: 'Prompt demasiado largo (mÃ¡x 1000 caracteres)' });
       }
       
       const { token: userToken } = await getUserReplicateToken(req.uid);
@@ -178,7 +179,7 @@ function createTestApp() {
       const result = await response.json();
       
       if (!result.output) {
-        return res.status(500).json({ error: 'No se generó imagen de salida' });
+        return res.status(500).json({ error: 'No se generÃ³ imagen de salida' });
       }
       
       res.json({ success: true, outputUrl: Array.isArray(result.output) ? result.output[0] : result.output });
@@ -190,9 +191,9 @@ function createTestApp() {
   return app;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // TESTS
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 describe('API Endpoints', () => {
   let app;
@@ -202,7 +203,7 @@ describe('API Endpoints', () => {
     jest.clearAllMocks();
   });
 
-  // ── GET /api/health ──────────────────────────────────────────────────────────
+  // â”€â”€ GET /api/health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   describe('GET /api/health', () => {
     it('devuelve status ok', async () => {
       const res = await request(app).get('/api/health');
@@ -213,9 +214,9 @@ describe('API Endpoints', () => {
     });
   });
 
-  // ── GET /api/user/token ──────────────────────────────────────────────────────
+  // â”€â”€ GET /api/user/token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   describe('GET /api/user/token', () => {
-    it('requiere autenticación', async () => {
+    it('requiere autenticaciÃ³n', async () => {
       verifyAuthToken.mockResolvedValue({ uid: null, error: 'Token requerido' });
       
       const res = await request(app).get('/api/user/token');
@@ -226,7 +227,7 @@ describe('API Endpoints', () => {
 
     it('devuelve hasToken: true si usuario tiene token', async () => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
-      getUserReplicateToken.mockResolvedValue({ token: 'r8_validtoken12345', error: null });
+      getUserReplicateToken.mockResolvedValue({ token: 'r8_validtoken1234567890validtoken1234', error: null });
       
       const res = await request(app)
         .get('/api/user/token')
@@ -249,19 +250,19 @@ describe('API Endpoints', () => {
     });
   });
 
-  // ── POST /api/user/token ─────────────────────────────────────────────────────
+  // â”€â”€ POST /api/user/token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   describe('POST /api/user/token', () => {
-    it('requiere autenticación', async () => {
+    it('requiere autenticaciÃ³n', async () => {
       verifyAuthToken.mockResolvedValue({ uid: null, error: 'Token requerido' });
       
       const res = await request(app)
         .post('/api/user/token')
-        .send({ token: 'r8_test12345678' });
+        .send({ token: 'r8_validtoken1234567890validtoken1234' });
       
       expect(res.status).toBe(401);
     });
 
-    it('rechaza token vacío', async () => {
+    it('rechaza token vacÃ­o', async () => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
       
       const res = await request(app)
@@ -273,7 +274,7 @@ describe('API Endpoints', () => {
       expect(res.body.error).toBe('Token requerido');
     });
 
-    it('rechaza token con formato inválido (sin r8_)', async () => {
+    it('rechaza token con formato invÃ¡lido (sin r8_)', async () => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
       
       const res = await request(app)
@@ -282,7 +283,7 @@ describe('API Endpoints', () => {
         .send({ token: 'invalidtoken12345' });
       
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('inválido');
+      expect(res.body.error).toContain('invÃ¡lido');
     });
 
     it('rechaza token muy corto', async () => {
@@ -296,18 +297,18 @@ describe('API Endpoints', () => {
       expect(res.status).toBe(400);
     });
 
-    it('guarda token válido correctamente', async () => {
+    it('guarda token vÃ¡lido correctamente', async () => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
       saveUserReplicateToken.mockResolvedValue({ success: true, error: null });
       
       const res = await request(app)
         .post('/api/user/token')
         .set('Authorization', 'Bearer valid')
-        .send({ token: 'r8_validtoken1234567890' });
+        .send({ token: 'r8_validtoken1234567890validtoken1234' });
       
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(saveUserReplicateToken).toHaveBeenCalledWith('user123', 'r8_validtoken1234567890');
+      expect(saveUserReplicateToken).toHaveBeenCalledWith('user123', 'r8_validtoken1234567890validtoken1234');
     });
 
     it('maneja error al guardar token', async () => {
@@ -317,23 +318,23 @@ describe('API Endpoints', () => {
       const res = await request(app)
         .post('/api/user/token')
         .set('Authorization', 'Bearer valid')
-        .send({ token: 'r8_validtoken1234567890' });
+        .send({ token: 'r8_validtoken1234567890validtoken1234' });
       
       expect(res.status).toBe(500);
       expect(res.body.error).toBe('DB error');
     });
   });
 
-  // ── POST /api/remove-bg ──────────────────────────────────────────────────────
+  // â”€â”€ POST /api/remove-bg â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   describe('POST /api/remove-bg', () => {
     const validImageUrl = 'https://firebasestorage.googleapis.com/v0/b/test/o/img.jpg';
 
     beforeEach(() => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
-      getUserReplicateToken.mockResolvedValue({ token: 'r8_usertoken', error: null });
+      getUserReplicateToken.mockResolvedValue({ token: 'r8_validtoken1234567890validtoken1234', error: null });
     });
 
-    it('requiere autenticación', async () => {
+    it('requiere autenticaciÃ³n', async () => {
       verifyAuthToken.mockResolvedValue({ uid: null, error: 'No autenticado' });
       
       const res = await request(app)
@@ -411,7 +412,7 @@ describe('API Endpoints', () => {
       expect(res.body.outputUrl).toBe('https://output.url/result.png');
     });
 
-    it('maneja token de Replicate inválido', async () => {
+    it('maneja token de Replicate invÃ¡lido', async () => {
       fetch.mockResolvedValue({
         ok: false,
         status: 401,
@@ -455,18 +456,18 @@ describe('API Endpoints', () => {
         .send({ imageUrl: validImageUrl });
       
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('No se generó imagen de salida');
+      expect(res.body.error).toBe('No se generÃ³ imagen de salida');
     });
   });
 
-  // ── POST /api/generate-image ─────────────────────────────────────────────────
+  // â”€â”€ POST /api/generate-image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   describe('POST /api/generate-image', () => {
     beforeEach(() => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
-      getUserReplicateToken.mockResolvedValue({ token: 'r8_usertoken', error: null });
+      getUserReplicateToken.mockResolvedValue({ token: 'r8_validtoken1234567890validtoken1234', error: null });
     });
 
-    it('requiere autenticación', async () => {
+    it('requiere autenticaciÃ³n', async () => {
       verifyAuthToken.mockResolvedValue({ uid: null, error: 'No autenticado' });
       
       const res = await request(app)
@@ -533,7 +534,7 @@ describe('API Endpoints', () => {
       
       expect(res.status).toBe(200);
       
-      // Dimensiones inválidas deben ser reemplazadas por 1024
+      // Dimensiones invÃ¡lidas deben ser reemplazadas por 1024
       expect(fetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -594,9 +595,9 @@ describe('API Endpoints', () => {
   });
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // TESTS DE SEGURIDAD ADICIONALES
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 describe('Security Tests', () => {
   let app;
@@ -615,7 +616,7 @@ describe('Security Tests', () => {
         .set('Authorization', 'Bearer valid')
         .send({ imageUrl: 'https://firebasestorage.googleapis.com/../../../etc/passwd' });
       
-      // La URL no debería procesar - puede ser 400 o error de validación
+      // La URL no deberÃ­a procesar - puede ser 400 o error de validaciÃ³n
       expect([400, 500]).toContain(res.status);
     });
   });
@@ -623,7 +624,7 @@ describe('Security Tests', () => {
   describe('Injection Prevention', () => {
     it('maneja prompt con caracteres especiales sin errores', async () => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
-      getUserReplicateToken.mockResolvedValue({ token: 'r8_test', error: null });
+      getUserReplicateToken.mockResolvedValue({ token: 'r8_validtoken1234567890validtoken1234', error: null });
       fetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ output: ['https://result.png'] })
@@ -646,7 +647,7 @@ describe('Security Tests', () => {
         .set('Authorization', 'Bearer valid')
         .send({ token: 'r8_<script>alert(1)</script>' });
       
-      // Debe rechazar token con formato inválido (400 o 500 son aceptables)
+      // Debe rechazar token con formato invÃ¡lido (400 o 500 son aceptables)
       expect([400, 500]).toContain(res.status);
     });
   });
@@ -676,3 +677,10 @@ describe('Security Tests', () => {
     });
   });
 });
+
+
+
+
+
+
+

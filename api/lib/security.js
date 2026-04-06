@@ -1,32 +1,36 @@
-/**
+﻿/**
  * Funciones de seguridad del servidor Express.
- * Extraídas de server.js para facilitar el testeo unitario.
+ * Extraidas de server.js para facilitar el testeo unitario.
  */
 
-/** Dominios permitidos para imageUrl — protección SSRF */
+/** Dominios HTTPS permitidos para URLs remotas de imagen (proteccion SSRF). */
 export const ALLOWED_IMAGE_DOMAINS = [
   'firebasestorage.googleapis.com',
   'storage.googleapis.com',
 ];
 
 /**
- * Verifica que la URL sea HTTPS y apunte a un dominio permitido de Firebase Storage.
- * Previene ataques SSRF donde un atacante podría hacer requests a redes internas.
+ * Verifica que la URL sea segura y aceptada.
+ * - Acepta esquema interno removin-temp:// con token firmado.
+ * - Acepta HTTPS solo en dominios permitidos.
  */
 export function isAllowedImageUrl(url) {
   try {
     const parsed = new URL(url);
+
+    if (parsed.protocol === 'removin-temp:') {
+      return Boolean(parsed.hostname && parsed.searchParams.get('token'));
+    }
+
     if (parsed.protocol !== 'https:') return false;
-    return ALLOWED_IMAGE_DOMAINS.some((domain) =>
-      parsed.hostname.endsWith(domain)
-    );
+    return ALLOWED_IMAGE_DOMAINS.some((domain) => parsed.hostname.endsWith(domain));
   } catch {
     return false;
   }
 }
 
 /**
- * Devuelve un mensaje de error seguro: en producción usa el fallback,
+ * Devuelve un mensaje de error seguro: en produccion usa el fallback,
  * en desarrollo expone el mensaje real para facilitar el debug.
  */
 export function safeErrorMessage(
@@ -40,13 +44,8 @@ export function safeErrorMessage(
 
 /**
  * Valida el formato del token de Replicate.
- * Debe comenzar con "r8_" y tener al menos 13 caracteres.
+ * Debe comenzar con "r8_" y tener longitud segura (>= 33 total aprox).
  */
 export function isValidReplicateToken(token) {
-  return (
-    typeof token === 'string' &&
-    token.startsWith('r8_') &&
-    token.trim() === token &&
-    token.length >= 13
-  );
+  return typeof token === 'string' && /^r8_[A-Za-z0-9_-]{30,}$/.test(token);
 }

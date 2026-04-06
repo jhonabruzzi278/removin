@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 const MASKED_VALUE = '••••••••••••••••';
-const validateToken = (token: string): boolean => /^r8_\S{10,}$/.test(token);
+const validateToken = (token: string): boolean => /^r8_\\S{30,}$/.test(token);
 
 export default function SettingsPage() {
   const { hasToken, checkingToken: loadingStatus, refreshTokenStatus } = useAuth();
@@ -176,3 +176,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+
