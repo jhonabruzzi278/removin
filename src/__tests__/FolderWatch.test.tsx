@@ -1,7 +1,7 @@
-import React from 'react';
+﻿import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-// ── Mocks de dependencias externas ─────────────────────────────────────────
+// â”€â”€ Mocks de dependencias externas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 jest.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'test-uid-123' }, loading: false }),
@@ -18,7 +18,7 @@ jest.mock('idb-keyval', () => ({
   set: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('@/lib/firebase', () => ({
+jest.mock('@/lib/session', () => ({
   auth: null,
   isConfigured: false,
   uploadFile: jest.fn().mockResolvedValue({ error: null }),
@@ -54,18 +54,18 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-// ── Import después de todos los mocks ───────────────────────────────────────
+// â”€â”€ Import despuÃ©s de todos los mocks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import FolderWatchPage from '@/pages/FolderWatch';
 
-// ── Tests ───────────────────────────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('FolderWatchPage - renderizado inicial', () => {
-  it('muestra el título Auto Monitor', async () => {
+  it('muestra el tÃ­tulo Auto Monitor', async () => {
     render(<FolderWatchPage />);
     expect(screen.getByText('Auto Monitor')).toBeInTheDocument();
   });
 
-  it('muestra el subtítulo descriptivo', () => {
+  it('muestra el subtÃ­tulo descriptivo', () => {
     render(<FolderWatchPage />);
     // Usar selector de clase para evitar problemas de encoding con caracteres especiales
     const subtitle = document.querySelector('.text-sm.font-medium.text-slate-500');
@@ -77,7 +77,7 @@ describe('FolderWatchPage - renderizado inicial', () => {
     expect(screen.getByText('Fondo Blanco')).toBeInTheDocument();
   });
 
-  it('renderiza la sección de Modelo de IA', async () => {
+  it('renderiza la secciÃ³n de Modelo de IA', async () => {
     render(<FolderWatchPage />);
     await waitFor(() => {
       expect(screen.getByText('Modelo de IA')).toBeInTheDocument();
@@ -87,15 +87,15 @@ describe('FolderWatchPage - renderizado inicial', () => {
   it('muestra exactamente 3 tarjetas de modelos', () => {
     render(<FolderWatchPage />);
     // Los modelos se renderizan en una grid de 3 columnas (sm:grid-cols-3)
-    // Buscamos los botones dentro de ese grid específico
+    // Buscamos los botones dentro de ese grid especÃ­fico
     const modelGrid = document.querySelector('.grid.grid-cols-1');
     const modelButtons = modelGrid ? modelGrid.querySelectorAll('button') : [];
     expect(modelButtons.length).toBe(3);
   });
 });
 
-describe('FolderWatchPage - botón Iniciar Monitoreo', () => {
-  it('está deshabilitado si no hay carpetas ni modelo seleccionado', () => {
+describe('FolderWatchPage - botÃ³n Iniciar Monitoreo', () => {
+  it('estÃ¡ deshabilitado si no hay carpetas ni modelo seleccionado', () => {
     render(<FolderWatchPage />);
     const btn = screen.getByRole('button', { name: /iniciar monitoreo/i });
     expect(btn).toBeDisabled();
@@ -103,13 +103,13 @@ describe('FolderWatchPage - botón Iniciar Monitoreo', () => {
 });
 
 describe('FolderWatchPage - tarjetas de carpetas', () => {
-  it('muestra el botón de carpeta de entrada', () => {
+  it('muestra el botÃ³n de carpeta de entrada', () => {
     render(<FolderWatchPage />);
     const labels = screen.getAllByText(/Entrada/i);
     expect(labels.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('muestra el botón de carpeta de salida', () => {
+  it('muestra el botÃ³n de carpeta de salida', () => {
     render(<FolderWatchPage />);
     const labels = screen.getAllByText(/Salida/i);
     expect(labels.length).toBeGreaterThanOrEqual(1);
@@ -122,15 +122,15 @@ describe('FolderWatchPage - tarjetas de carpetas', () => {
   });
 });
 
-describe('FolderWatchPage - estadísticas', () => {
-  it('muestra tarjetas de estadísticas con valores en cero', async () => {
+describe('FolderWatchPage - estadÃ­sticas', () => {
+  it('muestra tarjetas de estadÃ­sticas con valores en cero', async () => {
     render(<FolderWatchPage />);
-    // Total, Exitosas, Errores, Rastreados — todos en 0 inicialmente
+    // Total, Exitosas, Errores, Rastreados â€” todos en 0 inicialmente
     const zeros = screen.getAllByText('0');
     expect(zeros.length).toBe(4);
   });
 
-  it('muestra las etiquetas de las estadísticas', () => {
+  it('muestra las etiquetas de las estadÃ­sticas', () => {
     render(<FolderWatchPage />);
     expect(screen.getByText('Total')).toBeInTheDocument();
     expect(screen.getByText('Exitosas')).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe('FolderWatchPage - switch Fondo Blanco', () => {
   });
 });
 
-describe('FolderWatchPage - selección de modelo', () => {
+describe('FolderWatchPage - selecciÃ³n de modelo', () => {
   it('al hacer clic en un modelo este queda seleccionado', async () => {
     render(<FolderWatchPage />);
     // Obtener todas las tarjetas de modelo (botones en la grilla de modelos)
@@ -159,7 +159,7 @@ describe('FolderWatchPage - selección de modelo', () => {
 
     if (modelButtons.length > 0) {
       fireEvent.click(modelButtons[0]);
-      // El checkmark de selección debería aparecer
+      // El checkmark de selecciÃ³n deberÃ­a aparecer
       await waitFor(() => {
         const checkmarks = document.querySelectorAll('.bg-indigo-600.rounded-full');
         expect(checkmarks.length).toBeGreaterThan(0);
@@ -168,8 +168,8 @@ describe('FolderWatchPage - selección de modelo', () => {
   });
 });
 
-describe('FolderWatchPage - aviso configuración pendiente', () => {
-  it('muestra el aviso cuando falta configuración', async () => {
+describe('FolderWatchPage - aviso configuraciÃ³n pendiente', () => {
+  it('muestra el aviso cuando falta configuraciÃ³n', async () => {
     render(<FolderWatchPage />);
     await waitFor(() => {
       expect(
@@ -180,7 +180,7 @@ describe('FolderWatchPage - aviso configuración pendiente', () => {
 });
 
 describe('FolderWatchPage - navegador no compatible', () => {
-  it('muestra aviso de compatibilidad cuando FileSystem API no está disponible', () => {
+  it('muestra aviso de compatibilidad cuando FileSystem API no estÃ¡ disponible', () => {
     // Quitar temporalmente showDirectoryPicker para simular navegador sin soporte
     const descriptor = Object.getOwnPropertyDescriptor(window, 'showDirectoryPicker');
     // @ts-expect-error -- eliminando propiedad experimental para test
@@ -195,3 +195,4 @@ describe('FolderWatchPage - navegador no compatible', () => {
     }
   });
 });
+

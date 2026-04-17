@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { get, set } from 'idb-keyval';
 import { Toast } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
@@ -98,9 +98,14 @@ export default function FolderWatchPage() {
   } = directoryObserver;
   
   // Filtrar a 3 modelos principales: económico, estándar y premium
-  const bgModels = availableModels.filter(m => 
-    m.category === 'background-removal' && 
-    ['cjwbw-rembg', 'lucataco-remove-bg', 'smoretalk-rembg-enhance'].includes(m.id)
+  const bgModels = useMemo(
+    () =>
+      availableModels.filter(
+        (m) =>
+          m.category === 'background-removal' &&
+          ['cjwbw-rembg', 'lucataco-remove-bg', 'smoretalk-rembg-enhance'].includes(m.id)
+      ),
+    []
   );
 
   const getQualityLevel = (quality: string): number => {
@@ -164,7 +169,16 @@ export default function FolderWatchPage() {
     };
     
     restoreConfig();
-  }, []); // Solo al montar
+  }, [bgModels]); // Solo al montar (bgModels esta memoizado)
+
+  // Mantener referencias actualizadas para cleanup sin depender de objeto completo.
+  const stopProcessingRef = useRef(pageVisibility.stopProcessing);
+  const releaseLockRef = useRef(pageVisibility.releaseLock);
+
+  useEffect(() => {
+    stopProcessingRef.current = pageVisibility.stopProcessing;
+    releaseLockRef.current = pageVisibility.releaseLock;
+  }, [pageVisibility.stopProcessing, pageVisibility.releaseLock]);
 
   // Guardar configuración cuando cambie
   useEffect(() => {
@@ -483,8 +497,8 @@ export default function FolderWatchPage() {
     isMonitoringRef.current = false;
     
     // Desactivar persistencia
-    pageVisibility.stopProcessing();
-    pageVisibility.releaseLock();
+    stopProcessingRef.current();
+    releaseLockRef.current();
     
     info('⏸️ Monitoreo detenido');
     
@@ -528,8 +542,8 @@ export default function FolderWatchPage() {
       }
       isMonitoringRef.current = false;
       // Limpiar persistencia
-      pageVisibility.stopProcessing();
-      pageVisibility.releaseLock();
+      stopProcessingRef.current();
+      releaseLockRef.current();
     };
   }, []);
 

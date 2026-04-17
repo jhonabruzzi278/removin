@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { uploadFile, getPublicUrl, deleteFile } from '@/lib/firebase';
+import { uploadFile, getPublicUrl, deleteFile } from '@/lib/session';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
@@ -116,3 +116,4 @@ export function useImageProcessor() {
 
   return { startBatch, isProcessing, progress };
 }
+

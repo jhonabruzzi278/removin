@@ -56,14 +56,20 @@ export function DashboardLayout() {
 
   // Countdown regresivo de 2 minutos cuando hay aviso de sesión
   useEffect(() => {
-    if (!sessionWarning) {
+    if (!sessionWarning) return;
+
+    const resetId = setTimeout(() => {
       setCountdown(120);
-      return;
-    }
+    }, 0);
+
     const interval = setInterval(() => {
       setCountdown(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearTimeout(resetId);
+      clearInterval(interval);
+    };
   }, [sessionWarning]);
 
   const handleSignOut = async () => {

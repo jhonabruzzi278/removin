@@ -34,8 +34,10 @@ export const auth: { currentUser: AuthenticatedUser | null } = {
 };
 
 export const isConfigured =
-  !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY &&
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY !== 'your_clerk_publishable_key_here';
+  !!import.meta.env.VITE_SUPABASE_URL &&
+  import.meta.env.VITE_SUPABASE_URL !== 'your_supabase_url_here' &&
+  !!import.meta.env.VITE_SUPABASE_ANON_KEY &&
+  import.meta.env.VITE_SUPABASE_ANON_KEY !== 'your_supabase_anon_key_here';
 
 function getApiBaseUrl(): string {
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {

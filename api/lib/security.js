@@ -5,7 +5,6 @@
 
 /** Dominios HTTPS permitidos para URLs remotas de imagen (proteccion SSRF). */
 export const ALLOWED_IMAGE_DOMAINS = [
-  'firebasestorage.googleapis.com',
   'storage.googleapis.com',
 ];
 

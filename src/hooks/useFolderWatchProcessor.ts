@@ -1,4 +1,4 @@
-﻿import { uploadFile, getPublicUrl, deleteFile } from '@/lib/firebase';
+﻿import { uploadFile, getPublicUrl, deleteFile } from '@/lib/session';
 import { apiClient } from '@/lib/api';
 import type { AIModel } from '@/data/models';
 
@@ -234,3 +234,4 @@ export function useFolderWatchProcessor({ onSuccess, onError, user }: UseFolderW
     getModelDelay,
   };
 }
+

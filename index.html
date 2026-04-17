@@ -7,21 +7,20 @@
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self';
-        script-src 'self' 'unsafe-inline' https://js.clerk.com;
+        script-src 'self' 'unsafe-inline';
         style-src 'self' 'unsafe-inline';
         connect-src 'self'
           http://localhost:3001
           https://api.replicate.com
           https://replicate.delivery
+          https://*.supabase.co
+          https://*.supabase.in
           https://*.googleusercontent.com
           https://*.ingest.sentry.io
-          https://*.ingest.us.sentry.io
-          https://*.clerk.accounts.dev
-          https://api.clerk.dev;
+          https://*.ingest.us.sentry.io;
         img-src 'self' blob: data:
           https://*.googleusercontent.com
-          https://replicate.delivery
-          https://img.clerk.com;
+          https://replicate.delivery;
         frame-src 'self' https://accounts.google.com;
         worker-src 'self' blob:;"
     />

@@ -11,10 +11,10 @@ import {
 } from '../lib/security.js';
 
 describe('isAllowedImageUrl() — proteccion SSRF', () => {
-  it('acepta URL de firebasestorage.googleapis.com', () => {
+  it('acepta URL de storage.googleapis.com (ruta v0)', () => {
     expect(
       isAllowedImageUrl(
-        'https://firebasestorage.googleapis.com/v0/b/proyecto/o/img.jpg?alt=media'
+        'https://storage.googleapis.com/v0/b/proyecto/o/img.jpg?alt=media'
       )
     ).toBe(true);
   });
@@ -29,7 +29,7 @@ describe('isAllowedImageUrl() — proteccion SSRF', () => {
 
   it('rechaza URL con protocolo http (no seguro)', () => {
     expect(
-      isAllowedImageUrl('http://firebasestorage.googleapis.com/v0/b/test/o/img.jpg')
+      isAllowedImageUrl('http://storage.googleapis.com/v0/b/test/o/img.jpg')
     ).toBe(false);
   });
 
@@ -45,8 +45,8 @@ describe('isAllowedImageUrl() — proteccion SSRF', () => {
     expect(isAllowedImageUrl('https://169.254.169.254/latest/meta-data/')).toBe(false);
   });
 
-  it('rechaza subdomain spoofing: evil.com/firebasestorage.googleapis.com', () => {
-    expect(isAllowedImageUrl('https://evil.com/firebasestorage.googleapis.com/img.jpg')).toBe(false);
+  it('rechaza subdomain spoofing: evil.com/storage.googleapis.com', () => {
+    expect(isAllowedImageUrl('https://evil.com/storage.googleapis.com/img.jpg')).toBe(false);
   });
 
   it('rechaza URL malformada', () => {
@@ -56,11 +56,10 @@ describe('isAllowedImageUrl() — proteccion SSRF', () => {
   });
 
   it('rechaza protocol ftp://', () => {
-    expect(isAllowedImageUrl('ftp://firebasestorage.googleapis.com/file.jpg')).toBe(false);
+    expect(isAllowedImageUrl('ftp://storage.googleapis.com/file.jpg')).toBe(false);
   });
 
   it('ALLOWED_IMAGE_DOMAINS contiene los dominios esperados', () => {
-    expect(ALLOWED_IMAGE_DOMAINS).toContain('firebasestorage.googleapis.com');
     expect(ALLOWED_IMAGE_DOMAINS).toContain('storage.googleapis.com');
   });
 });

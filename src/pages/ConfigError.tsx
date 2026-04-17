@@ -13,7 +13,7 @@ export default function ConfigErrorPage() {
           </div>
           <CardTitle className="text-2xl font-bold text-slate-900">Configuracion Requerida</CardTitle>
           <CardDescription className="text-base">
-            Necesitas configurar Clerk y la base de datos para usar la aplicacion
+            Necesitas configurar Supabase (Auth + DB) para usar la aplicacion
           </CardDescription>
         </CardHeader>
 
@@ -22,7 +22,7 @@ export default function ConfigErrorPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Variables de entorno no configuradas</AlertTitle>
             <AlertDescription>
-              No se encontraron las credenciales de Clerk en el archivo .env
+              No se encontraron las credenciales de Supabase en el archivo .env
             </AlertDescription>
           </Alert>
 
@@ -34,25 +34,26 @@ export default function ConfigErrorPage() {
 
             <ol className="space-y-4 list-decimal list-inside text-sm text-slate-700">
               <li className="pl-2">
-                <strong>Crea una app en Clerk</strong>
+                <strong>Crea un proyecto en Supabase</strong>
                 <p className="ml-6 mt-1 text-slate-600">
                   Ve a{' '}
                   <a
-                    href="https://dashboard.clerk.com"
+                    href="https://supabase.com/dashboard"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline inline-flex items-center gap-1"
                   >
-                    dashboard.clerk.com <ExternalLink size={12} />
+                    supabase.com/dashboard <ExternalLink size={12} />
                   </a>{' '}
-                  y copia la Publishable Key
+                  y habilita Google Sign-In en Authentication.
                 </p>
               </li>
 
               <li className="pl-2">
                 <strong>Configura el archivo .env</strong>
                 <div className="ml-6 mt-2 bg-slate-900 text-slate-100 p-3 rounded-lg font-mono text-xs">
-                  <div>VITE_CLERK_PUBLISHABLE_KEY=pk_test_...</div>
+                  <div>VITE_SUPABASE_URL=https://xxxx.supabase.co</div>
+                  <div>VITE_SUPABASE_ANON_KEY=eyJ...</div>
                   <div className="text-slate-500">VITE_API_URL=http://localhost:3001</div>
                 </div>
               </li>
@@ -60,7 +61,8 @@ export default function ConfigErrorPage() {
               <li className="pl-2">
                 <strong>Configura el backend (api/.env)</strong>
                 <div className="ml-6 mt-2 bg-slate-900 text-slate-100 p-3 rounded-lg font-mono text-xs">
-                  <div>CLERK_SECRET_KEY=sk_test_...</div>
+                  <div>SUPABASE_URL=https://xxxx.supabase.co</div>
+                  <div>SUPABASE_SERVICE_ROLE_KEY=eyJ...</div>
                   <div>DATABASE_URL=postgresql://...neon...</div>
                 </div>
               </li>
@@ -79,13 +81,6 @@ export default function ConfigErrorPage() {
               Ya configure las credenciales - Recargar
             </Button>
           </div>
-
-          <p className="text-xs text-center text-slate-500">
-            Necesitas ayuda? Consulta el{' '}
-            <a href="https://github.com/tuusuario/removin/blob/main/README.md" className="text-blue-600 hover:underline">
-              README.md
-            </a>
-          </p>
         </CardContent>
       </Card>
     </div>

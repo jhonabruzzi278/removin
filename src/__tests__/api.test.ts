@@ -1,8 +1,8 @@
-﻿// Mockear firebase antes de importar api.ts
-jest.mock('@/lib/firebase', () => ({
+﻿// Mockear session antes de importar api.ts
+jest.mock('@/lib/session', () => ({
   auth: {
     currentUser: {
-      getIdToken: jest.fn().mockResolvedValue('mock-clerk-token'),
+      getIdToken: jest.fn().mockResolvedValue('mock-supabase-token'),
     },
   },
   isConfigured: true,
@@ -45,7 +45,7 @@ describe('ApiClient.hasToken()', () => {
   });
 
   it('lanza error si no hay sesion activa', async () => {
-    const { auth } = jest.requireMock('@/lib/firebase') as { auth: { currentUser: unknown } };
+    const { auth } = jest.requireMock('@/lib/session') as { auth: { currentUser: unknown } };
     const original = auth.currentUser;
     auth.currentUser = null;
 
@@ -57,7 +57,7 @@ describe('ApiClient.hasToken()', () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ hasToken: true, isCustom: true }));
     await apiClient.hasToken();
     const call = mockFetch.mock.calls[0];
-    expect(call[1].headers['Authorization']).toBe('Bearer mock-clerk-token');
+    expect(call[1].headers['Authorization']).toBe('Bearer mock-supabase-token');
   });
 });
 
@@ -135,3 +135,4 @@ describe('ApiClient - reintentos y red', () => {
     expect(result.hasToken).toBe(true);
   });
 });
+

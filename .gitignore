@@ -16,15 +16,18 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
 api/.env
 api/.env.local
+api/.env.*
+!api/.env.example
 
 # Sensitive files
 *.pem
 *.key
 *.cert
 VERCEL_ENV_VARS.txt
-*firebase*.json
 
 # Test coverage
 coverage/

@@ -1,15 +1,15 @@
-/**
+﻿/**
  * Tests para useAuth hook y AuthContext
- * Enfoque simplificado para evitar problemas con mocks complejos de Firebase
+ * Enfoque simplificado para evitar problemas con mocks complejos de sesion
  */
 
 import React from 'react';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Context y Provider de Test
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 interface AuthContextValue {
   user: { uid: string; email: string } | null;
@@ -72,9 +72,9 @@ function TestConsumer({ onAuth }: { onAuth?: (auth: AuthContextValue) => void })
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // TESTS
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 describe('useAuth hook', () => {
   describe('Uso sin Provider', () => {
@@ -94,7 +94,7 @@ describe('useAuth hook', () => {
   });
 
   describe('Estado del contexto', () => {
-    it('devuelve usuario null cuando no hay sesión', () => {
+    it('devuelve usuario null cuando no hay sesiÃ³n', () => {
       render(
         <TestAuthProvider value={{ user: null }}>
           <TestConsumer />
@@ -104,7 +104,7 @@ describe('useAuth hook', () => {
       expect(screen.getByTestId('user')).toHaveTextContent('no-user');
     });
 
-    it('devuelve datos del usuario cuando hay sesión', () => {
+    it('devuelve datos del usuario cuando hay sesiÃ³n', () => {
       const mockUser = { uid: 'test-123', email: 'test@example.com' };
       
       render(
@@ -217,8 +217,8 @@ describe('useAuth hook', () => {
     });
   });
 
-  describe('Integración con componentes', () => {
-    it('múltiples consumidores reciben el mismo estado', () => {
+  describe('IntegraciÃ³n con componentes', () => {
+    it('mÃºltiples consumidores reciben el mismo estado', () => {
       const mockUser = { uid: 'shared', email: 'shared@example.com' };
       
       function MultiConsumer() {
@@ -247,3 +247,4 @@ describe('useAuth hook', () => {
     });
   });
 });
+

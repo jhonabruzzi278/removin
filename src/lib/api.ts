@@ -1,4 +1,4 @@
-﻿import { auth, type AppUser } from './firebase';
+﻿import { auth, type AppUser } from './session';
 
 /**
  * Resolve API base URL depending on runtime host.
@@ -33,14 +33,6 @@ export interface RemoveBackgroundResponse {
 export interface GenerateImageResponse {
   success: boolean;
   outputUrl: string;
-  error?: string;
-}
-
-export interface GoogleAuthResponse {
-  success: boolean;
-  token: string;
-  expiresAt: string;
-  user: AppUser;
   error?: string;
 }
 
@@ -111,28 +103,6 @@ class ApiClient {
     }
   }
 
-  async googleSignIn(idToken: string): Promise<GoogleAuthResponse> {
-    return this.request<GoogleAuthResponse>(
-      '/api/auth/google',
-      {
-        method: 'POST',
-        body: JSON.stringify({ idToken }),
-      },
-      0,
-      false
-    );
-  }
-
-  async getCurrentUser(): Promise<CurrentUserResponse> {
-    return this.request<CurrentUserResponse>('/api/auth/me');
-  }
-
-  async logout(): Promise<{ success: boolean }> {
-    return this.request<{ success: boolean }>('/api/auth/logout', {
-      method: 'POST',
-    });
-  }
-
   async hasToken(): Promise<TokenResponse> {
     return this.request<TokenResponse>('/api/user/token');
   }
@@ -175,3 +145,4 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+

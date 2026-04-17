@@ -13,7 +13,7 @@ import {
   resolveTemporaryUploadFromInternalUrl,
   parseInternalTempUrl,
   cleanupExpiredData,
-} from './lib/firebase-admin.js';
+} from './lib/auth-admin.js';
 import { isAllowedImageUrl, safeErrorMessage, isValidReplicateToken } from './lib/security.js';
 
 dotenv.config();
@@ -71,13 +71,25 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const allowedOrigins = IS_PRODUCTION
-  ? [
-      'https://removin.vercel.app',
-      process.env.FRONTEND_URL,
-      process.env.APP_URL,
-    ].filter(Boolean)
-  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
+const productionOrigins = [
+  'https://removin.vercel.app',
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+  process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : null,
+].filter(Boolean);
+
+const developmentOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+].filter(Boolean);
+
+const allowedOrigins = Array.from(new Set(IS_PRODUCTION ? productionOrigins : developmentOrigins));
 
 app.use(
   cors({
@@ -473,3 +485,4 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default app;
+

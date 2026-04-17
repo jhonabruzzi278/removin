@@ -5,8 +5,8 @@
 
 import express from 'express';
 
-// Mock de Firebase Admin antes de importar server
-jest.mock('../lib/firebase-admin.js', () => ({
+// Mock de Auth Admin antes de importar server
+jest.mock('../lib/auth-admin.js', () => ({
   verifyAuthToken: jest.fn(),
   getUserReplicateToken: jest.fn(),
   saveUserReplicateToken: jest.fn(),
@@ -19,7 +19,7 @@ import {
   verifyAuthToken,
   getUserReplicateToken,
   saveUserReplicateToken,
-} from '../lib/firebase-admin.js';
+} from '../lib/auth-admin.js';
 const fetch = jest.fn();
 
 global.fetch = fetch;
@@ -97,7 +97,7 @@ function createTestApp() {
       try {
         const parsed = new URL(imageUrl);
         if (parsed.protocol !== 'https:' || 
-            !['firebasestorage.googleapis.com', 'storage.googleapis.com'].some(d => parsed.hostname.endsWith(d))) {
+            !['storage.googleapis.com', 'storage.googleapis.com'].some(d => parsed.hostname.endsWith(d))) {
           return res.status(400).json({ error: 'URL de imagen no permitida' });
         }
       } catch {
@@ -231,7 +231,7 @@ describe('API Endpoints', () => {
       
       const res = await request(app)
         .get('/api/user/token')
-        .set('Authorization', 'Bearer valid-firebase-token');
+        .set('Authorization', 'Bearer valid-supabase-token');
       
       expect(res.status).toBe(200);
       expect(res.body.hasToken).toBe(true);
@@ -243,7 +243,7 @@ describe('API Endpoints', () => {
       
       const res = await request(app)
         .get('/api/user/token')
-        .set('Authorization', 'Bearer valid-firebase-token');
+        .set('Authorization', 'Bearer valid-supabase-token');
       
       expect(res.status).toBe(200);
       expect(res.body.hasToken).toBe(false);
@@ -327,7 +327,7 @@ describe('API Endpoints', () => {
 
   // â”€â”€ POST /api/remove-bg â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   describe('POST /api/remove-bg', () => {
-    const validImageUrl = 'https://firebasestorage.googleapis.com/v0/b/test/o/img.jpg';
+    const validImageUrl = 'https://storage.googleapis.com/v0/b/test/o/img.jpg';
 
     beforeEach(() => {
       verifyAuthToken.mockResolvedValue({ uid: 'user123', error: null });
@@ -378,7 +378,7 @@ describe('API Endpoints', () => {
       const res = await request(app)
         .post('/api/remove-bg')
         .set('Authorization', 'Bearer valid')
-        .send({ imageUrl: 'http://firebasestorage.googleapis.com/v0/b/test/o/img.jpg' });
+        .send({ imageUrl: 'http://storage.googleapis.com/v0/b/test/o/img.jpg' });
       
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('URL de imagen no permitida');
@@ -614,7 +614,7 @@ describe('Security Tests', () => {
       const res = await request(app)
         .post('/api/remove-bg')
         .set('Authorization', 'Bearer valid')
-        .send({ imageUrl: 'https://firebasestorage.googleapis.com/../../../etc/passwd' });
+        .send({ imageUrl: 'https://storage.googleapis.com/../../../etc/passwd' });
       
       // La URL no deberÃ­a procesar - puede ser 400 o error de validaciÃ³n
       expect([400, 500]).toContain(res.status);
@@ -677,6 +677,8 @@ describe('Security Tests', () => {
     });
   });
 });
+
+
 
 
 

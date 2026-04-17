@@ -1,23 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-let supabaseAdmin = null;
+let supabaseAdminClient = null;
 
-export function getSupabaseAdmin() {
-  if (supabaseAdmin) return supabaseAdmin;
-
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    throw new Error('SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son obligatorios');
+export function getSupabaseAdminClient() {
+  if (supabaseAdminClient) {
+    return supabaseAdminClient;
   }
 
-  supabaseAdmin = createClient(url, serviceRoleKey, {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridos');
+  }
+
+  supabaseAdminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {
-      autoRefreshToken: false,
       persistSession: false,
+      autoRefreshToken: false,
     },
   });
 
-  return supabaseAdmin;
+  return supabaseAdminClient;
 }

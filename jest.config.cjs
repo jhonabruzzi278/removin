@@ -13,7 +13,7 @@ module.exports = {
 
   // Transformar paquetes ESM dentro de node_modules
   transformIgnorePatterns: [
-    '/node_modules/(?!(idb-keyval|lucide-react|@firebase|firebase)/)',
+    '/node_modules/(?!(idb-keyval|lucide-react)/)',
   ],
 
   // Resolver el alias @/ al directorio src/

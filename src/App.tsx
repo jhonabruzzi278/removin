@@ -4,6 +4,7 @@ import { AuthProvider } from '@/components/auth/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { lazy, Suspense } from 'react';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 const LoginPage = lazy(() => import('@/pages/Login'));
 const OnboardingPage = lazy(() => import('@/pages/Onboarding'));
@@ -15,9 +16,7 @@ const FolderWatchPage = lazy(() => import('@/pages/FolderWatch'));
 const UsagePage = lazy(() => import('@/pages/Usage'));
 const ConfigErrorPage = lazy(() => import('@/pages/ConfigError'));
 
-const isConfigured =
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY &&
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY !== 'your_clerk_publishable_key_here';
+const isConfigured = isSupabaseConfigured();
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

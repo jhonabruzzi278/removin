@@ -1,7 +1,8 @@
-﻿import { useAuth as useClerkAuth, useUser } from '@clerk/react';
-import { createContext, useCallback, useEffect, useRef, useState } from 'react';
+﻿import { createContext, useCallback, useEffect, useRef, useState } from 'react';
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { apiClient } from '@/lib/api';
-import { auth, setCurrentUser, setTokenProvider, clearAuthSession } from '@/lib/firebase';
+import { auth, setCurrentUser, setTokenProvider, clearAuthSession } from '@/lib/session';
+import { getSupabaseClient } from '@/lib/supabase';
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const WARNING_BEFORE_MS = 2 * 60 * 1000;
@@ -14,6 +15,20 @@ interface TokenCache {
   hasToken: boolean;
   uid: string;
   timestamp: number;
+}
+
+function mapSupabaseUser(user: SupabaseUser) {
+  const metadata = user.user_metadata ?? {};
+  return {
+    uid: user.id,
+    email: user.email || 'user@removin.app',
+    displayName:
+      metadata.full_name ||
+      metadata.name ||
+      metadata.user_name ||
+      (user.email ? user.email.split('@')[0] : 'Usuario'),
+    photoURL: metadata.avatar_url || metadata.picture || null,
+  };
 }
 
 function getCachedTokenStatus(uid: string): boolean | null {
@@ -75,8 +90,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user: clerkUser, isLoaded } = useUser();
-  const { signOut: clerkSignOut, getToken } = useClerkAuth();
+  const supabase = getSupabaseClient();
 
   const [user, setUser] = useState<AuthContextType['user']>(null);
   const [loading, setLoading] = useState(true);
@@ -88,40 +102,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setTokenProvider(async () => {
-      const token = await getToken({ template: undefined });
-      return token || null;
-    });
-  }, [getToken]);
+    let isMounted = true;
 
-  useEffect(() => {
-    if (!isLoaded) {
-      setLoading(true);
-      return;
-    }
+    const applySession = (session: Session | null) => {
+      if (!isMounted) return;
 
-    if (!clerkUser) {
-      setUser(null);
+      if (!session?.user) {
+        setUser(null);
+        setLoading(false);
+        setCurrentUser(null);
+        clearAuthSession();
+        clearTokenCache();
+        setHasToken(false);
+        setCheckingToken(false);
+        return;
+      }
+
+      const mapped = mapSupabaseUser(session.user);
+      setUser(mapped);
+      setCurrentUser(mapped);
       setLoading(false);
-      setCurrentUser(null);
-      clearAuthSession();
-      return;
-    }
-
-    const mapped = {
-      uid: clerkUser.id,
-      email:
-        clerkUser.primaryEmailAddress?.emailAddress ||
-        clerkUser.emailAddresses[0]?.emailAddress ||
-        'user@removin.app',
-      displayName: clerkUser.fullName || clerkUser.firstName || 'Usuario',
-      photoURL: clerkUser.imageUrl || null,
     };
 
-    setUser(mapped);
-    setCurrentUser(mapped);
-    setLoading(false);
-  }, [clerkUser, isLoaded]);
+    setTokenProvider(async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) return null;
+      return data.session?.access_token || null;
+    });
+
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Error leyendo sesion:', error.message);
+          applySession(null);
+          return;
+        }
+        applySession(data.session);
+      })
+      .catch(() => {
+        applySession(null);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   const refreshTokenStatus = useCallback(
     async (forceRefresh = false) => {
@@ -186,10 +219,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     logoutTimerRef.current = setTimeout(async () => {
       if (auth.currentUser) {
-        await clerkSignOut();
+        await supabase.auth.signOut();
       }
     }, INACTIVITY_LIMIT_MS);
-  }, [clearTimers, clerkSignOut]);
+  }, [clearTimers, supabase]);
 
   useEffect(() => {
     if (!user) {
@@ -223,7 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     clearTokenCache();
-    await clerkSignOut();
+    await supabase.auth.signOut();
   };
 
   const extendSession = useCallback(() => {
@@ -249,3 +282,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export { AuthContext };
+
