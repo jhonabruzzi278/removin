@@ -63,7 +63,6 @@ export default function ConfigErrorPage() {
                 <div className="ml-6 mt-2 bg-slate-900 text-slate-100 p-3 rounded-lg font-mono text-xs">
                   <div>SUPABASE_URL=https://xxxx.supabase.co</div>
                   <div>SUPABASE_SERVICE_ROLE_KEY=eyJ...</div>
-                  <div>DATABASE_URL=postgresql://...neon...</div>
                 </div>
               </li>
 

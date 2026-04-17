@@ -94,7 +94,7 @@ export default function UsagePage() {
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-700">Almacenamiento temporal</span>
               <Tooltip
-                content="Las imagenes se guardan temporalmente en Neon con acceso firmado. No hay costo adicional."
+                content="Las imagenes se guardan temporalmente en tablas seguras de Supabase con acceso firmado. No hay costo adicional."
                 position="right"
               >
                 <HelpCircle size={14} className="text-slate-400" />

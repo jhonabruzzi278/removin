@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "npm ci && npm --prefix api ci",
-  "buildCommand": "npm run build && npm --prefix api run prisma:generate",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "headers": [
     {
